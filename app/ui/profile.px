@@ -1,0 +1,72 @@
+from pyjsx import JSX, jsx
+
+from .components import Avatar, Layout, SearchForm
+
+
+def ProfilePage(*, children=None, profile=None, viewer=None, action=None, notice="", title=None) -> JSX:
+    """Public profile page for a Bluesky actor.
+
+    ``profile`` is the fetched ``app.bsky.actor.getProfile`` dict, ``action``
+    is a pre-built JSX fragment (offer button / status / login prompt),
+    ``notice`` an optional message about a previous action.
+    """
+    handle = profile.get("handle", "")
+    display = profile.get("displayName") or handle
+    title = title or f"{display} – MutualSky"
+
+    stats = None
+    followers = profile.get("followersCount")
+    follows = profile.get("followsCount")
+    if followers is not None or follows is not None:
+        parts = []
+        if followers is not None:
+            parts.append(<span>{followers} Follower</span>)
+        if follows is not None:
+            parts.append(<span>folgt {follows}</span>)
+        stats = <div class="profile-stats">{parts}</div>
+
+    notice_box = None
+    if notice:
+        notice_box = <p class="notice notice-error">{notice}</p>
+
+    bio = None
+    if profile.get("description"):
+        bio = <p class="bio">{profile.get("description")}</p>
+
+    return (
+        <Layout title={title} user={viewer}>
+            <div class="card profile-card">
+                <Avatar url={profile.get("avatar")} name={display} size="lg" />
+                <div class="profile-info">
+                    <h1>{display}</h1>
+                    <span class="actor-handle">@{handle}</span>
+                    {bio}
+                    {stats}
+                    <a class="btn btn-ghost" href={"https://bsky.app/profile/" + handle} target="_blank" rel="noopener">
+                        Profil auf Bluesky ansehen
+                    </a>
+                </div>
+            </div>
+            {notice_box}
+            <div id="offer-action">
+                {action}
+            </div>
+            <section class="card search-section">
+                <h2>Weitere Accounts suchen</h2>
+                <SearchForm />
+                <div id="search-results"></div>
+            </section>
+        </Layout>
+    )
+
+
+def Profile404(*, children=None, handle="", user=None) -> JSX:
+    return (
+        <Layout title="Nicht gefunden – MutualSky" user={user}>
+            <div class="card">
+                <h1>Account nicht gefunden</h1>
+                <p class="muted">@{handle} konnte nicht aufgelöst werden.</p>
+                <a class="btn btn-ghost" href="/">Zurück zur Suche</a>
+            </div>
+        </Layout>
+    )

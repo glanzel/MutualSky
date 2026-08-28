@@ -1,0 +1,65 @@
+from pyjsx import JSX, jsx
+
+from .components import Layout, StatusBadge
+
+
+def OfferPage(*, children=None, offer=None, viewer=None, offerer_profile=None, target_profile=None, title="Angebot – MutualSky") -> JSX:
+    """Render the (potentially public) offer page.
+
+    ``offer`` is a dict with prepared display fields; ``viewer`` a dict with
+    ``did``/``handle`` plus booleans ``is_target``, ``is_offerer``; action
+    panels are pre-rendered fragments passed as ``action_panel`` and
+    ``notice``.
+    """
+    badge = StatusBadge(status=offer.get("status", ""))
+    dm_status = offer.get("dm_status", "none")
+
+    dm_line = None
+    if dm_status == "failed":
+        dm_line = <p class="muted">DM konnte nicht zugestellt werden.</p>
+    elif dm_status == "sent":
+        dm_line = <p class="muted">Benachrichtigung per Bluesky-DM gesendet.</p>
+
+    return (
+        <Layout title={title} user={viewer}>
+            <div class="card offer-hero">
+                <div class="offer-pair">
+                    <AvatarFromProfile profile={offerer_profile} handle={offer.get("offerer_handle", "")} />
+                    <span class="swap-mark">⇄</span>
+                    <AvatarFromProfile profile={target_profile} handle={offer.get("target_handle", "")} />
+                </div>
+                <p class="swap-text">
+                    <strong>@{offer.get("offerer_handle", "")}</strong> möchte
+                    <strong> @{offer.get("target_handle", "")}</strong> folgen,
+                    wenn <strong>@{offer.get("target_handle", "")}</strong> zurückfolgt.
+                </p>
+                <div class="offer-statusline">
+                    {badge}
+                    {dm_line}
+                </div>
+                {offer.get("notice")}
+                <div id="offer-action" class="offer-action">
+                    {offer.get("action_panel")}
+                </div>
+            </div>
+        </Layout>
+    )
+
+
+def AvatarFromProfile(*, children=None, profile=None, handle="") -> JSX:
+    if profile and profile.get("avatar"):
+        name = profile.get("displayName") or handle
+        return <img class="avatar avatar-lg" src={profile.get("avatar")} alt={name} loading="lazy" />
+    return <div class="avatar avatar-lg avatar-placeholder">{(profile.get("displayName") or handle or "?")[:1].upper()}</div>
+
+
+def Offer404(*, children=None, user=None) -> JSX:
+    return (
+        <Layout title="Nicht gefunden – MutualSky" user={user}>
+            <div class="card">
+                <h1>Angebot nicht gefunden</h1>
+                <p class="muted">Dieses Follow-Swap-Angebot existiert nicht (mehr).</p>
+                <a class="btn btn-ghost" href="/">Zur Startseite</a>
+            </div>
+        </Layout>
+    )

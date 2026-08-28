@@ -1,0 +1,78 @@
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
+
+from ..bluesky import client as public_client
+from ..deps import current_user
+from ..models import User
+from ..offers import pending_offer_between
+from ..security import rate_limit
+from ..ui import components as ui_components
+from ..ui import partials as ui_partials
+from ..ui import profile as profile_ui
+
+router = APIRouter()
+
+
+@router.post("/profiles/search", dependencies=[Depends(rate_limit(20, 60))])
+async def search_profiles(request: Request):
+    form = await request.form()
+    query = str(form.get("q", "")).strip()
+    if not query:
+        return HTMLResponse(str(ui_components.SearchResults(actors=[])))
+    try:
+        actors = await public_client.search_actors(query)
+    except public_client.PublicBskyError as exc:
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=[f"Suche fehlgeschlagen: {exc}"])))
+    return HTMLResponse(str(ui_components.SearchResults(actors=actors)))
+
+
+@router.get("/profile/{handle}", response_class=HTMLResponse)
+async def profile_page(request: Request, handle: str, user: User | None = Depends(current_user)):
+    try:
+        profile = await public_client.get_profile(handle)
+    except public_client.PublicBskyError:
+        viewer_view = None
+        if user:
+            viewer_view = {"handle": user.handle, "display_name": user.display_name or user.handle, "avatar": user.avatar_url}
+        return HTMLResponse(str(profile_ui.Profile404(handle=handle, user=viewer_view)), status_code=404)
+
+    viewer_did = user.did if user else None
+    profile_did = profile.get("did", "")
+
+    if viewer_did is None:
+        action = ui_partials.LoginCta(next_url="/profile/" + handle)
+        notice = None
+    elif viewer_did == profile_did:
+        action = ui_partials.InfoPanel(text="Das ist dein eigenes Profil.")
+        notice = None
+    else:
+        offer_me_to_them = await pending_offer_between(user.did, profile_did)
+        offer_them_to_me = await pending_offer_between(profile_did, user.did)
+        action = None
+        notice = None
+        if offer_me_to_them is not None:
+            action = ui_partials.InfoPanel(text="Dein Angebot ist ausstehend – du folgst erst nach der Bestätigung.")
+            notice = None
+        elif offer_them_to_me is not None:
+            action = ui_partials.InfoPanel(text="Diese Person hat dir einen Follow-Swap angeboten.")
+        else:
+            try:
+                already = await public_client.does_follow(user.did, profile_did)
+            except public_client.PublicBskyError:
+                already = False
+            if already:
+                action = ui_partials.InfoPanel(text="Du folgst diesem Account bereits.")
+            else:
+                action = ui_partials.OfferStartButton(target_handle=profile.get("handle", ""))
+
+    viewer_view = None
+    if user:
+        viewer_view = {"handle": user.handle, "display_name": user.display_name or user.handle, "avatar": user.avatar_url}
+
+    page = profile_ui.ProfilePage(
+        profile=profile,
+        viewer=viewer_view,
+        action=action,
+        notice=notice,
+    )
+    return str(page)

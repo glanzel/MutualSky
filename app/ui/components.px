@@ -1,0 +1,122 @@
+from pyjsx import HTMLDontEscape, JSX, jsx
+
+GOOD_TEXT_CLASS = {"pending": "badge", "processing": "badge", "completed": "badge badge-ok", "cancelled": "badge badge-muted", "expired": "badge badge-muted"}
+
+
+def Layout(*, children=None, title="MutualSky", user=None) -> JSX:
+    nav_right = None
+    if user:
+        handle = user.get("handle", "")
+        bsky_url = "https://bsky.app/profile/" + handle
+        nav_right = <div class="user-nav">
+            <a href={bsky_url} target="_blank" rel="noopener">{handle}</a>
+            <form method="post" action="/auth/logout">
+                <button type="submit" class="btn btn-ghost">Abmelden</button>
+            </form>
+        </div>
+    else:
+        nav_right = <a class="btn btn-primary" href="/auth/login">Mit Bluesky anmelden</a>
+
+    return (
+        <html lang="de">
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>{title}</title>
+                <link rel="stylesheet" href="/static/style.css" />
+                <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+            </head>
+            <body>
+                <header class="site-header">
+                    <nav class="site-nav">
+                        <a class="logo" href="/">MutualSky</a>
+                        {nav_right}
+                    </nav>
+                </header>
+                <main class="container">
+                    {children}
+                </main>
+                <footer class="footer">
+                    <p>Freundschaft auf dem Atmosphere – MutualSky</p>
+                </footer>
+            </body>
+        </html>
+    )
+
+
+def StatusBadge(*, children=None, status="") -> JSX:
+    cls = GOOD_TEXT_CLASS.get(status, "badge")
+    return <span class={cls}>{children}</span>
+
+
+def SearchForm(*, children=None, query="") -> JSX:
+    return (
+        <form class="search-form" hx-post="/profiles/search" hx-target="#search-results" hx-swap="innerHTML">
+            <input type="search" name="q" placeholder="Suche einen Bluesky-Account… (z. B. anna.bsky.social)" value={query} required />
+            <button type="submit" class="btn btn-primary">Suchen</button>
+        </form>
+    )
+
+
+def SearchResults(*, children=None, actors=None) -> JSX:
+    if not actors:
+        return <p class="muted">Keine Ergebnisse.</p>
+    cards = []
+    for actor in actors:
+        cards.append(<ActorCard actor={actor} />)
+    return <div class="actor-list">{cards}</div>
+
+
+def ActorCard(*, children=None, actor=None) -> JSX:
+    handle = actor.get("handle", "")
+    did = actor.get("did", "")
+    display = actor.get("displayName") or handle
+    avatar = actor.get("avatar")
+    return (
+        <div class="card actor-card">
+            <Avatar url={avatar} name={display} />
+            <div class="actor-info">
+                <a class="actor-name" href={"/profile/" + handle}>{display}</a>
+                <span class="actor-handle">@{handle}</span>
+            </div>
+            <a class="btn btn-primary" href={"/profile/" + handle}>Profil</a>
+        </div>
+    )
+
+
+def Avatar(*, children=None, url=None, name="", size="md") -> JSX:
+    if url:
+        return <img class={"avatar avatar-" + size} src={url} alt={name} loading="lazy" />
+    return <div class={"avatar avatar-" + size + " avatar-placeholder"}>{name[:1].upper() if name else "?"}</div>
+
+
+def OfferRow(*, children=None, offer=None, role="offerer") -> JSX:
+    status = offer.get("status", "") if isinstance(offer, dict) else getattr(offer, "status", "")
+    if isinstance(offer, dict):
+        other_handle = offer.get("target_handle") if role == "offerer" else offer.get("offerer_handle")
+        did = offer.get("target_did") if role == "offerer" else offer.get("offerer_did")
+        offer_id = offer.get("id")
+    else:
+        other_handle = offer.target_handle if role == "offerer" else offer.offerer_handle
+        did = offer.target_did if role == "offerer" else offer.offerer_did
+        offer_id = offer.id
+
+    label = "Folge ich an:" if role == "offerer" else "Bietet mir an:"
+    badge = StatusBadge(status=status)
+    return (
+        <li class="offer-row">
+            <Avatar name={other_handle} />
+            <div class="offer-info">
+                <span class="muted">{label}</span>
+                <strong>@{other_handle or did}</strong>
+            </div>
+            <div class="offer-actions">
+                {badge}
+                <a class="btn btn-ghost" href={"/o/" + str(offer_id)}>Ansehen</a>
+            </div>
+        </li>
+    )
+
+
+def Notice(*, children=None, kind="error") -> JSX:
+    return <p class={"notice notice-" + kind}>{children}</p>

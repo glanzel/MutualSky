@@ -1,0 +1,82 @@
+from pyjsx import JSX, jsx
+
+from .components import Layout, SearchForm, StatusBadge, OfferRow
+
+
+def LandingPage(*, children=None, title="MutualSky") -> JSX:
+    return (
+        <Layout title={title} user={None}>
+            <section class="hero">
+                <h1>Freundschaft auf dem Atmosphere</h1>
+                <p class="lede">
+                    Folge gezielt neuen Accounts – und du bekommst einen Follow zurück,
+                    wenn du einem zurückfolgst. Tausche Follows mit Bluesky, fair und automatisch.
+                </p>
+                <a class="btn btn-primary btn-lg" href="/auth/login">Mit Bluesky anmelden</a>
+            </section>
+            <section class="howto">
+                <h2>So funktioniert es</h2>
+                <ol>
+                    <li><strong>Anmelden</strong> – mit deinem Bluesky-Account (OAuth, du behältst die Kontrolle).</li>
+                    <li><strong>Auswählen</strong> – suche einen Account, dem du folgen möchtest.</li>
+                    <li><strong>Anbieten</strong> – sende ein Follow-Swap-Angebot. Die Person bekommt eine Nachricht.</li>
+                    <li><strong>Bestätigen</strong> – folgt sie dir zurück und bestätigt den Tausch, werden <em>beide</em> Follows sofort gesetzt.</li>
+                </ol>
+            </section>
+        </Layout>
+    )
+
+
+def LoginPage(*, children=None, error="", next_url="") -> JSX:
+    error_box = None
+    if error:
+        error_box = <p class="notice notice-error">{error}</p>
+    return (
+        <Layout title="Anmelden – MutualSky" user={None}>
+            <section class="card login-card">
+                <h1>Mit Bluesky anmelden</h1>
+                <p class="muted">Gib deinen Bluesky-Handle ein – du wirst zur Bluesky-Anmeldeseite weitergeleitet und bestimmst dort selbst, welche Rechte du erteilst.</p>
+                {error_box}
+                <form method="post" action="/auth/start" class="login-form">
+                    <input type="hidden" name="next" value={next_url} />
+                    <input type="text" name="handle" placeholder="z. B. anna.bsky.social" required />
+                    <button type="submit" class="btn btn-primary">Weiter zu Bluesky</button>
+                </form>
+            </section>
+        </Layout>
+    )
+
+
+def Dashboard(*, children=None, user=None, outgoing=None, incoming=None, title="Dashboard – MutualSky") -> JSX:
+    out_items = [<li><OfferRow offer={offer} role="offerer" /></li> for offer in outgoing]
+    in_items = [<li><OfferRow offer={offer} role="target" /></li> for offer in incoming]
+    empty_out = <li><p class="muted">Noch keine Angebote – suche unten einen Account.</p></li>
+    empty_in = <li><p class="muted">Noch keine Angebote an dich.</p></li>
+
+    outgoing_box = (
+        <section class="card">
+            <h2>Von mir angeboten</h2>
+            <ul class="offer-list">{out_items or [empty_out]}</ul>
+        </section>
+    )
+    incoming_box = (
+        <section class="card">
+            <h2>Eingegangene Angebote</h2>
+            <ul class="offer-list">{in_items or [empty_in]}</ul>
+        </section>
+    )
+
+    return (
+        <Layout title={title} user={user}>
+            <h1>Hallo, @{user.get("handle", "")}</h1>
+            <div class="grid">
+                {outgoing_box}
+                {incoming_box}
+            </div>
+            <section class="card search-section">
+                <h2>Account suchen</h2>
+                <SearchForm />
+                <div id="search-results"></div>
+            </section>
+        </Layout>
+    )
