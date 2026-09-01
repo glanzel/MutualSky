@@ -1,11 +1,13 @@
 from pyjsx import JSX, jsx
 
+from .. import i18n
+
 
 def LoginCta(*, children=None, next_url="") -> JSX:
     return (
         <div class="panel">
-            <p class="muted">Melde dich mit deinen Bluesky-Account an, um dieses Angebot zu bestätigen.</p>
-            <a class="btn btn-primary" href={"/auth/login?next=" + next_url}>Mit Bluesky anmelden</a>
+            <p class="muted">{i18n.t("Melde dich mit deinen Bluesky-Account an, um dieses Angebot zu bestätigen.")}</p>
+            <a class="btn btn-primary" href={"/auth/login?next=" + next_url}>{i18n.t("Mit Bluesky anmelden")}</a>
         </div>
     )
 
@@ -14,10 +16,10 @@ def ConfirmPanel(*, children=None, confirm_url="", offerer="") -> JSX:
     return (
         <div class="panel">
             <p class="muted">
-                Sobald du bestätigst, wirst du <strong>@{offerer}</strong> folgen – dein Follow wird im selben Schritt erwidert.
+                {i18n.t("Sobald du bestätigst, wirst du @{offerer} folgen – dein Follow wird im selben Schritt erwidert.", offerer=offerer)}
             </p>
             <button class="btn btn-primary btn-lg" hx-post={confirm_url} hx-swap="outerHTML" hx-target="#offer-action">
-                Follow-Swap bestätigen
+                {i18n.t("Follow-Swap bestätigen")}
             </button>
         </div>
     )
@@ -25,23 +27,23 @@ def ConfirmPanel(*, children=None, confirm_url="", offerer="") -> JSX:
 
 def ResultPanel(*, children=None, ok=False, text="") -> JSX:
     cls = "notice notice-ok" if ok else "notice notice-error"
-    return <div class="panel"><p class={cls}>{text}</p><a class="btn btn-ghost" href="/">Zum Dashboard</a></div>
+    return <div class="panel"><p class={cls}>{text}</p><a class="btn btn-ghost" href="/">{i18n.t("Zum Dashboard")}</a></div>
 
 
 def CancelPanel(*, children=None, cancel_url="", resend_url="", dm_failed=False, reply_url="") -> JSX:
     actions = []
     if dm_failed and resend_url:
         actions.append(
-            <button class="btn btn-ghost" hx-post={resend_url} hx-swap="outerHTML" hx-target="#offer-action">DM erneut senden</button>
+            <button class="btn btn-ghost" hx-post={resend_url} hx-swap="outerHTML" hx-target="#offer-action">{i18n.t("DM erneut senden")}</button>
         )
     if dm_failed and reply_url:
         actions.append(
-            <button class="btn btn-ghost" hx-post={reply_url} hx-swap="outerHTML" hx-target="#offer-action">Öffentlich als Antwort posten</button>
+            <button class="btn btn-ghost" hx-post={reply_url} hx-swap="outerHTML" hx-target="#offer-action">{i18n.t("Öffentlich als Antwort posten")}</button>
         )
     return (
         <div class="panel">
-            <p class="muted">Du wartest darauf, dass die Person das Angebot bestätigt.</p>
-            <button class="btn btn-ghost" hx-post={cancel_url} hx-swap="outerHTML" hx-target="#offer-action">Angebot zurückziehen</button>
+            <p class="muted">{i18n.t("Du wartest darauf, dass die Person das Angebot bestätigt.")}</p>
+            <button class="btn btn-ghost" hx-post={cancel_url} hx-swap="outerHTML" hx-target="#offer-action">{i18n.t("Angebot zurückziehen")}</button>
             {actions}
         </div>
     )
@@ -52,9 +54,9 @@ def OfferStartButton(*, children=None, target_handle="") -> JSX:
     return (
         <div class="panel">
             <button class="btn btn-primary btn-lg" hx-post="/offers" hx-swap="outerHTML" hx-target="#offer-action" hx-vals={hx_vals}>
-                Follow-Swap anbieten
+                {i18n.t("Follow-Swap anbieten")}
             </button>
-            <p class="muted">Die Person wird per Bluesky-DM benachrichtigt. Du folgst erst, wenn sie zustimmt – dann tauscht ihr sofort.</p>
+            <p class="muted">{i18n.t("Die Person wird per Bluesky-DM benachrichtigt. Du folgst erst, wenn sie zustimmt – dann tauscht ihr sofort.")}</p>
         </div>
     )
 
@@ -64,14 +66,15 @@ def OfferCreatedPanel(*, children=None, offer_url="", dm_failed=False, dm_error=
     reply_btn = None
     if dm_failed:
         detail = f" – {dm_error}" if dm_error else ""
-        notice = <p class="notice notice-error">Angebot erstellt, aber die DM-Benachrichtigung fehlgeschlagen.{detail}</p>
+        notice = <p class="notice notice-error">{i18n.t("Angebot erstellt, aber die DM-Benachrichtigung fehlgeschlagen.")}{detail}</p>
         if reply_url:
-            reply_btn = <button class="btn btn-ghost" hx-post={reply_url} hx-swap="outerHTML" hx-target="closest .panel">Öffentlich als Antwort posten</button>
+            reply_btn = <button class="btn btn-ghost" hx-post={reply_url} hx-swap="outerHTML" hx-target="closest .panel">{i18n.t("Öffentlich als Antwort posten")}</button>
+    created_label = i18n.t("Angebot erstellt und per DM gesendet.") if not dm_failed else i18n.t("Angebot erstellt.")
     return (
         <div class="panel">
-            <p class="notice notice-ok">Angebot erstellt {"" if dm_failed else "und per DM gesendet"}.</p>
+            <p class="notice notice-ok">{created_label}</p>
             {notice}
-            <a class="btn btn-primary" href={offer_url}>Angebot ansehen</a>
+            <a class="btn btn-primary" href={offer_url}>{i18n.t("Angebot ansehen")}</a>
             {reply_btn}
         </div>
     )
@@ -81,6 +84,6 @@ def InfoPanel(*, children=None, text="") -> JSX:
     return (
         <div class="panel">
             <p class="muted">{text}</p>
-            <a class="btn btn-ghost" href="/">Zum Dashboard</a>
+            <a class="btn btn-ghost" href="/">{i18n.t("Zum Dashboard")}</a>
         </div>
     )

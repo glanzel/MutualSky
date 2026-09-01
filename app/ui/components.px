@@ -2,6 +2,8 @@ from pyjsx import HTMLDontEscape, JSX, jsx
 
 from datetime import datetime
 
+from .. import i18n
+
 GOOD_TEXT_CLASS = {"pending": "badge", "processing": "badge", "completed": "badge badge-ok", "cancelled": "badge badge-muted", "expired": "badge badge-muted"}
 
 
@@ -38,16 +40,20 @@ def Layout(*, children=None, title="MutualSky", user=None) -> JSX:
         handle = user.get("handle", "")
         bsky_url = "https://bsky.app/profile/" + handle
         nav_right = <div class="user-nav">
+            <a href="/archiv">{i18n.t("Archiv")}</a>
             <a href={bsky_url} target="_blank" rel="noopener">{handle}</a>
             <form method="post" action="/auth/logout">
-                <button type="submit" class="btn btn-ghost">Abmelden</button>
+                <button type="submit" class="btn btn-ghost">{i18n.t("Abmelden")}</button>
             </form>
         </div>
     else:
-        nav_right = <a class="btn btn-primary" href="/auth/login">Mit Bluesky anmelden</a>
+        nav_right = <a class="btn btn-primary" href="/auth/login">{i18n.t("Mit Bluesky anmelden")}</a>
+
+    show_lang = "en" if i18n.get_locale() == "de" else "de"
+    lang_label = "English" if show_lang == "en" else "Deutsch"
 
     return (
-        <html lang="de">
+        <html lang={i18n.get_locale()}>
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -58,15 +64,18 @@ def Layout(*, children=None, title="MutualSky", user=None) -> JSX:
             <body>
                 <header class="site-header">
                     <nav class="site-nav">
-                        <a class="logo" href="/">MutualSky</a>
+                        <a class="logo" href="/">MutualSky <span class="beta">Beta</span></a>
                         {nav_right}
+                        <button type="button" class="btn btn-ghost lang-switch"
+                                onclick={"location='/lang/" + show_lang + "?next='+encodeURIComponent(location.pathname)"}>{lang_label}</button>
                     </nav>
                 </header>
                 <main class="container">
                     {children}
                 </main>
                 <footer class="footer">
-                    <p>Freundschaft auf dem Atmosphere – MutualSky</p>
+                    <p>{i18n.t("Freundschaft auf dem Atmosphere – MutualSky")}</p>
+                    <a href="https://github.com/glanzel/MutualSky" target="_blank" rel="noopener">{i18n.t("Open Source auf GitHub ansehen")}</a>
                 </footer>
             </body>
         </html>
@@ -81,9 +90,9 @@ def StatusBadge(*, children=None, status="") -> JSX:
 def SearchForm(*, children=None, query="", max_followers="") -> JSX:
     return (
         <form class="search-form" hx-post="/profiles/search" hx-target="#search-results" hx-swap="innerHTML">
-            <input type="search" name="q" placeholder="Suche einen Bluesky-Account… (z. B. anna.bsky.social)" value={query} required />
-            <input type="number" name="max_followers" min="0" step="1" placeholder="max. Follower" value={max_followers} />
-            <button type="submit" class="btn btn-primary">Suchen</button>
+            <input type="search" name="q" placeholder={i18n.t("Suche einen Bluesky-Account… (z. B. anna.bsky.social)")} value={query} required />
+            <input type="number" name="max_followers" min="0" step="1" placeholder={i18n.t("max. Follower")} value={max_followers} />
+            <button type="submit" class="btn btn-primary">{i18n.t("Suchen")}</button>
         </form>
     )
 
@@ -98,7 +107,7 @@ def _load_more_vals(query, max_followers, cursor) -> HTMLDontEscape:
 
 
 def _more_button() -> JSX:
-    return <button type="button" class="btn btn-ghost load-more-btn">Weitere Ergebnisse laden</button>
+    return <button type="button" class="btn btn-ghost load-more-btn">{i18n.t("Weitere Ergebnisse laden")}</button>
 
 
 def SearchTabs(*, children=None, user=None, title="Accounts suchen") -> JSX:
@@ -118,16 +127,16 @@ def SearchTabs(*, children=None, user=None, title="Accounts suchen") -> JSX:
     else:
         posts_panel = (
             <div class="search-panel hidden" data-panel="posts">
-                <p class="muted">Die Post-Suche braucht eine Anmeldung.</p>
-                <a class="btn btn-primary" href="/auth/login">Mit Bluesky anmelden</a>
+                <p class="muted">{i18n.t("Die Post-Suche braucht eine Anmeldung.")}</p>
+                <a class="btn btn-primary" href="/auth/login">{i18n.t("Mit Bluesky anmelden")}</a>
             </div>
         )
     return (
         <section class="card search-section search-tabs-root">
             <h2>{title}</h2>
             <div class="search-tabs">
-                <button type="button" class="search-tab active" data-tab="accounts" onclick="mutualskyTab(event)">Accounts</button>
-                <button type="button" class="search-tab" data-tab="posts" onclick="mutualskyTab(event)">Posts</button>
+                <button type="button" class="search-tab active" data-tab="accounts" onclick="mutualskyTab(event)">{i18n.t("Accounts")}</button>
+                <button type="button" class="search-tab" data-tab="posts" onclick="mutualskyTab(event)">{i18n.t("Post/Account")}</button>
             </div>
             {accounts_panel}
             {posts_panel}
@@ -139,9 +148,9 @@ def SearchTabs(*, children=None, user=None, title="Accounts suchen") -> JSX:
 def PostSearchForm(*, children=None, query="", max_followers="") -> JSX:
     return (
         <form class="search-form" hx-post="/posts/search" hx-target="#post-results" hx-swap="innerHTML">
-            <input type="search" name="q" placeholder="Suche Posts… (z. B. Klima)" value={query} required />
-            <input type="number" name="max_followers" min="0" step="1" placeholder="max. Follower-Autor" value={max_followers} />
-            <button type="submit" class="btn btn-primary">Posts suchen</button>
+            <input type="search" name="q" placeholder={i18n.t("Suche Posts… (z. B. Klima)")} value={query} required />
+            <input type="number" name="max_followers" min="0" step="1" placeholder={i18n.t("max. Follower-Autor")} value={max_followers} />
+            <button type="submit" class="btn btn-primary">{i18n.t("Post/Account suchen")}</button>
         </form>
     )
 
@@ -158,13 +167,13 @@ def PostRow(*, children=None, post=None) -> JSX:
 
     stats = []
     if author.get("followersCount") is not None:
-        stats.append(<span class="actor-stat"><strong>{_fmt_count(author.get("followersCount"))}</strong> Follower</span>)
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(author.get("followersCount"))}</strong> {i18n.t("Follower")}</span>)
     if author.get("postsCount") is not None:
-        stats.append(<span class="actor-stat"><strong>{_fmt_count(author.get("postsCount"))}</strong> Beiträge</span>)
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(author.get("postsCount"))}</strong> {i18n.t("Beiträge")}</span>)
     if last_active:
-        stats.append(<span class="actor-stat muted">zuletzt aktiv: {last_active}</span>)
+        stats.append(<span class="actor-stat muted">{i18n.t("zuletzt aktiv: {when}", when=last_active)}</span>)
     if created:
-        stats.append(<span class="actor-stat muted">Post vom {created}</span>)
+        stats.append(<span class="actor-stat muted">{i18n.t("Post vom {when}", when=created)}</span>)
 
     return (
         <div class="card post-row">
@@ -175,7 +184,7 @@ def PostRow(*, children=None, post=None) -> JSX:
                 <p class="post-text">{text}</p>
                 <div class="actor-stats">{stats}</div>
             </div>
-            <a class="btn btn-primary" href={"/profile/" + handle}>Profil</a>
+            <a class="btn btn-primary" href={"/profile/" + handle}>{i18n.t("Profil")}</a>
         </div>
     )
 
@@ -188,9 +197,9 @@ def PostResults(*, children=None, posts=None, max_followers=None, query="", curs
         list_block = <div class="actor-list">{cards}</div>
     else:
         if max_followers:
-            list_block = <p class="muted">Keine Posts von Autoren mit höchstens {max_followers} Followern gefunden.</p>
+            list_block = <p class="muted">{i18n.t("Keine Posts von Autoren mit höchstens {max_followers} Followern gefunden.", max_followers=max_followers)}</p>
         else:
-            list_block = <p class="muted">Keine Ergebnisse.</p>
+            list_block = <p class="muted">{i18n.t("Keine Ergebnisse.")}</p>
     more = None
     if cursor:
         more = (
@@ -212,12 +221,12 @@ def PostResults(*, children=None, posts=None, max_followers=None, query="", curs
 
 def MorePostResults(*, children=None, posts=None, max_followers=None, query="", cursor=None) -> JSX:
     if not posts:
-        return <p class="muted load-more-end">Keine weiteren Ergebnisse.</p>
+        return <p class="muted load-more-end">{i18n.t("Keine weiteren Ergebnisse.")}</p>
     cards = []
     for post in posts:
         cards.append(<PostRow post={post} />)
     list_block = <div class="actor-list">{cards}</div>
-    inner = _more_button() if cursor else <p class="muted load-more-end">Ende der Ergebnisse.</p>
+    inner = _more_button() if cursor else <p class="muted load-more-end">{i18n.t("Ende der Ergebnisse.")}</p>
     return (
         <div class="load-more"
              hx-post="/posts/search/more"
@@ -238,9 +247,9 @@ def SearchResults(*, children=None, actors=None, max_followers=None, query="", c
         list_block = <div class="actor-list">{cards}</div>
     else:
         if max_followers:
-            list_block = <p class="muted">Keine Accounts mit höchstens {max_followers} Followern gefunden.</p>
+            list_block = <p class="muted">{i18n.t("Keine Accounts mit höchstens {max_followers} Followern gefunden.", max_followers=max_followers)}</p>
         else:
-            list_block = <p class="muted">Keine Ergebnisse.</p>
+            list_block = <p class="muted">{i18n.t("Keine Ergebnisse.")}</p>
     more = None
     if cursor:
         more = (
@@ -262,12 +271,12 @@ def SearchResults(*, children=None, actors=None, max_followers=None, query="", c
 
 def MoreResults(*, children=None, actors=None, max_followers=None, query="", cursor=None) -> JSX:
     if not actors:
-        return <p class="muted load-more-end">Keine weiteren Ergebnisse.</p>
+        return <p class="muted load-more-end">{i18n.t("Keine weiteren Ergebnisse.")}</p>
     cards = []
     for actor in actors:
         cards.append(<ActorCard actor={actor} />)
     list_block = <div class="actor-list">{cards}</div>
-    inner = _more_button() if cursor else <p class="muted load-more-end">Ende der Ergebnisse.</p>
+    inner = _more_button() if cursor else <p class="muted load-more-end">{i18n.t("Ende der Ergebnisse.")}</p>
     return (
         <div class="load-more"
              hx-post="/profiles/search/more"
@@ -290,13 +299,13 @@ def ActorCard(*, children=None, actor=None) -> JSX:
 
     stats = []
     if actor.get("followersCount") is not None:
-        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("followersCount"))}</strong> Follower</span>)
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("followersCount"))}</strong> {i18n.t("Follower")}</span>)
     if actor.get("followsCount") is not None:
-        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("followsCount"))}</strong> folgt</span>)
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("followsCount"))}</strong> {i18n.t("folgt")}</span>)
     if actor.get("postsCount") is not None:
-        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("postsCount"))}</strong> Beiträge</span>)
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("postsCount"))}</strong> {i18n.t("Beiträge")}</span>)
     if last_active:
-        stats.append(<span class="actor-stat muted">zuletzt aktiv: {last_active}</span>)
+        stats.append(<span class="actor-stat muted">{i18n.t("zuletzt aktiv: {when}", when=last_active)}</span>)
 
     bio = None
     if description:
@@ -313,7 +322,7 @@ def ActorCard(*, children=None, actor=None) -> JSX:
                 {stats_row}
                 {bio}
             </div>
-            <a class="btn btn-primary" href={"/profile/" + handle}>Profil</a>
+            <a class="btn btn-primary" href={"/profile/" + handle}>{i18n.t("Profil")}</a>
         </div>
     )
 
@@ -335,7 +344,7 @@ def OfferRow(*, children=None, offer=None, role="offerer") -> JSX:
         did = offer.target_did if role == "offerer" else offer.offerer_did
         offer_id = offer.id
 
-    label = "Folge ich an:" if role == "offerer" else "Bietet mir an:"
+    label = i18n.t("Folge ich an:") if role == "offerer" else i18n.t("Bietet mir an:")
     badge = StatusBadge(status=status)
     offer_url = offer.get("offer_url") or ("/o/" + str(offer_id))
     return (
@@ -347,7 +356,7 @@ def OfferRow(*, children=None, offer=None, role="offerer") -> JSX:
             </div>
             <div class="offer-actions">
                 {badge}
-                <a class="btn btn-ghost" href={offer_url}>Ansehen</a>
+                <a class="btn btn-ghost" href={offer_url}>{i18n.t("Ansehen")}</a>
             </div>
         </li>
     )

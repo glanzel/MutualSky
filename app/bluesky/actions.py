@@ -10,7 +10,7 @@ from ..oauth import atproto_oauth as oauth
 from . import client as public_client
 
 CHAT_PROXY = "did:web:api.bsky.chat#bsky_chat"
-APPVIEW_PROXY = "did:web:api.bsky.app#appview"
+APPVIEW_PROXY = "did:web:api.bsky.app#bsky_appview"
 
 
 class BlueskyActionError(Exception):
@@ -202,8 +202,13 @@ async def reply_to_offer_post(
     facets: list[dict] | None,
     settings,
     persist_cb=None,
+    rkey: str | None = None,
 ) -> None:
-    """Publicly reply to the target's latest post with the offer notice."""
+    """Publicly reply to the target's latest post with the offer notice.
+
+    Pass a deterministic ``rkey`` so the reply can be deleted later (e.g. when
+    the offer is withdrawn).
+    """
     feed = await public_client.get_author_feed(target_did, limit=10)
     top_level = next(
         (
@@ -241,7 +246,19 @@ async def reply_to_offer_post(
     }
     if facets:
         body["record"]["facets"] = facets
+    if rkey:
+        body["rkey"] = rkey
     await authed_post(user, "com.atproto.repo.createRecord", body, settings=settings, persist_cb=persist_cb)
+
+
+async def delete_record(
+    user: dict, collection: str, rkey: str, settings, persist_cb=None
+) -> None:
+    """Delete a repo record of the user (e.g. a public reply post)."""
+    body = {"repo": user["did"], "collection": collection, "rkey": rkey}
+    await authed_post(
+        user, "com.atproto.repo.deleteRecord", body, settings=settings, persist_cb=persist_cb
+    )
 
 
 async def send_dm(

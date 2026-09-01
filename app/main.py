@@ -9,7 +9,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .atproto_service import get_client_key
 from .config import get_settings
-from .routes import auth, home, offers, profiles
+from .i18n import set_locale
+from .routes import auth, home, lang, offers, profiles
 
 PROJECT_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 settings = get_settings()
@@ -25,6 +26,21 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="MutualSky", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def locale_middleware(request: Request, call_next):
+    locale = request.query_params.get("lang")
+    if not locale:
+        locale = (request.session.get("locale") if request.session else None) or "de"
+    if locale not in ("de", "en"):
+        locale = "de"
+    set_locale(locale)
+    if "locale" not in request.session:
+        request.session["locale"] = locale
+    return await call_next(request)
+
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
@@ -37,6 +53,7 @@ app.include_router(home.router)
 app.include_router(auth.router)
 app.include_router(profiles.router)
 app.include_router(offers.router)
+app.include_router(lang.router)
 
 
 def _public_jwk() -> dict:

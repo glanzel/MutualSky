@@ -4,8 +4,10 @@ from fastapi.responses import HTMLResponse
 from ..config import get_settings
 from ..deps import current_user
 from ..models import (
-    STATUS_CANCELLED,
+    STATUS_COMPLETED,
     STATUS_EXPIRED,
+    STATUS_PENDING,
+    STATUS_PROCESSING,
     Offer,
     User,
 )
@@ -48,10 +50,34 @@ async def index(request: Request, user: User | None = Depends(current_user)):
     for offer in list(outgoing) + list(incoming):
         await lazy_expire(offer)
 
-    outgoing = [o for o in outgoing if o.status not in (STATUS_CANCELLED, STATUS_EXPIRED)]
-    incoming = [o for o in incoming if o.status not in (STATUS_CANCELLED, STATUS_EXPIRED)]
+    open_statuses = (STATUS_PENDING, STATUS_PROCESSING)
+    outgoing = [o for o in outgoing if o.status in open_statuses]
+    incoming = [o for o in incoming if o.status in open_statuses]
 
     page = home_ui.Dashboard(
+        user=_user_view(user),
+        outgoing=[_offer_view(o, settings) for o in outgoing],
+        incoming=[_offer_view(o, settings) for o in incoming],
+    )
+    return str(page)
+
+
+@router.get("/archiv", response_class=HTMLResponse)
+async def archive(request: Request, user: User | None = Depends(current_user)):
+    if user is None:
+        return str(home_ui.LandingPage())
+
+    settings = get_settings()
+    outgoing = await Offer.objects.filter(offerer_did=user.did).all()
+    incoming = await Offer.objects.filter(target_did=user.did).all()
+    for offer in list(outgoing) + list(incoming):
+        await lazy_expire(offer)
+
+    archived_statuses = (STATUS_COMPLETED, STATUS_EXPIRED)
+    outgoing = [o for o in outgoing if o.status in archived_statuses]
+    incoming = [o for o in incoming if o.status in archived_statuses]
+
+    page = home_ui.ArchivePage(
         user=_user_view(user),
         outgoing=[_offer_view(o, settings) for o in outgoing],
         incoming=[_offer_view(o, settings) for o in incoming],

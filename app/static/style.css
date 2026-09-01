@@ -54,6 +54,30 @@ a:hover {
   gap: 16px;
 }
 
+.beta {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--sky);
+  border: 1px solid var(--sky);
+  border-radius: 6px;
+  padding: 1px 6px;
+  vertical-align: super;
+}
+
+.lang-switch {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.footer p {
+  margin: 0 0 4px;
+}
+
+.footer a {
+  color: var(--sky);
+  font-size: 0.85rem;
+}
+
 .logo {
   font-size: 1.25rem;
   font-weight: 700;

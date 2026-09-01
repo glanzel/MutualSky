@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
+from .. import i18n
 from ..atproto_service import make_persist_cb, session_to_dict
 from ..bluesky import actions as bsky_actions
 from ..bluesky import client as public_client
@@ -27,7 +28,7 @@ async def search_profiles(request: Request):
     try:
         actors, cursor = await public_client.search_profiles(query, max_followers=max_followers)
     except public_client.PublicBskyError as exc:
-        return HTMLResponse(str(ui_components.Notice(kind="error", children=[f"Suche fehlgeschlagen: {exc}"])))
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=[i18n.t("Suche fehlgeschlagen: {fehler}", fehler=exc)])))
     return HTMLResponse(
         str(ui_components.SearchResults(actors=actors, max_followers=max_followers, query=query, cursor=cursor))
     )
@@ -41,7 +42,7 @@ async def search_profiles_more(request: Request):
     max_followers = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
     cursor = str(form.get("cursor", "")).strip()
     if not query or not cursor:
-        return HTMLResponse(str(ui_components.Notice(kind="error", children=["Such-Sitzung abgelaufen."])))
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=[i18n.t("Such-Sitzung abgelaufen.")])))
     actors, next_cursor = await public_client.search_profiles(query, max_followers=max_followers, cursor=cursor)
     return HTMLResponse(
         str(ui_components.MoreResults(actors=actors, max_followers=max_followers, query=query, cursor=next_cursor))
@@ -65,7 +66,7 @@ async def profile_page(request: Request, handle: str, user: User | None = Depend
         action = ui_partials.LoginCta(next_url="/profile/" + handle)
         notice = None
     elif viewer_did == profile_did:
-        action = ui_partials.InfoPanel(text="Das ist dein eigenes Profil.")
+        action = ui_partials.InfoPanel(text=i18n.t("Das ist dein eigenes Profil."))
         notice = None
     else:
         offer_me_to_them = await pending_offer_between(user.did, profile_did)
@@ -73,17 +74,17 @@ async def profile_page(request: Request, handle: str, user: User | None = Depend
         action = None
         notice = None
         if offer_me_to_them is not None:
-            action = ui_partials.InfoPanel(text="Dein Angebot ist ausstehend – du folgst erst nach der Bestätigung.")
+            action = ui_partials.InfoPanel(text=i18n.t("Dein Angebot ist ausstehend – du folgst erst nach der Bestätigung."))
             notice = None
         elif offer_them_to_me is not None:
-            action = ui_partials.InfoPanel(text="Diese Person hat dir einen Follow-Swap angeboten.")
+            action = ui_partials.InfoPanel(text=i18n.t("Diese Person hat dir einen Follow-Swap angeboten."))
         else:
             try:
                 already = await public_client.does_follow(user.did, profile_did)
             except public_client.PublicBskyError:
                 already = False
             if already:
-                action = ui_partials.InfoPanel(text="Du folgst diesem Account bereits.")
+                action = ui_partials.InfoPanel(text=i18n.t("Du folgst diesem Account bereits."))
             else:
                 action = ui_partials.OfferStartButton(target_handle=profile.get("handle", ""))
 
@@ -118,10 +119,10 @@ async def search_posts_route(request: Request, user: User | None = Depends(curre
         )
     except bsky_actions.AuthSessionError as exc:
         return HTMLResponse(
-            str(ui_components.Notice(kind="error", children=[str(exc), ' '])) + '<a class="btn btn-primary" href="/auth/login">Erneut anmelden</a>'
+            str(ui_components.Notice(kind="error", children=[str(exc), ' '])) + '<a class="btn btn-primary" href="/auth/login">i18n.t("Erneut anmelden")</a>'
         )
     except bsky_actions.BlueskyActionError as exc:
-        return HTMLResponse(str(ui_components.Notice(kind="error", children=[f"Post-Suche fehlgeschlagen: {exc}"])))
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=[i18n.t("Post-Suche fehlgeschlagen: {fehler}", fehler=exc)])))
     posts = await public_client.enrich_posts_authors(posts, max_followers=max_followers)
     return HTMLResponse(
         str(ui_components.PostResults(posts=posts, max_followers=max_followers, query=query, cursor=cursor))
@@ -140,17 +141,17 @@ async def search_posts_more(request: Request, user: User | None = Depends(curren
     max_followers = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
     cursor = str(form.get("cursor", "")).strip()
     if not query or not cursor:
-        return HTMLResponse(str(ui_components.Notice(kind="error", children=["Such-Sitzung abgelaufen."])))
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=[i18n.t("Such-Sitzung abgelaufen.")])))
     try:
         posts, next_cursor = await bsky_actions.search_posts(
             session, query, settings, persist_cb=make_persist_cb(user, settings), cursor=cursor
         )
     except bsky_actions.AuthSessionError as exc:
         return HTMLResponse(
-            str(ui_components.Notice(kind="error", children=[str(exc), ' '])) + '<a class="btn btn-primary" href="/auth/login">Erneut anmelden</a>'
+            str(ui_components.Notice(kind="error", children=[str(exc), ' '])) + '<a class="btn btn-primary" href="/auth/login">i18n.t("Erneut anmelden")</a>'
         )
     except bsky_actions.BlueskyActionError as exc:
-        return HTMLResponse(str(ui_components.Notice(kind="error", children=[f"Post-Suche fehlgeschlagen: {exc}"])))
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=[i18n.t("Post-Suche fehlgeschlagen: {fehler}", fehler=exc)])))
     posts = await public_client.enrich_posts_authors(posts, max_followers=max_followers)
     return HTMLResponse(
         str(ui_components.MorePostResults(posts=posts, max_followers=max_followers, query=query, cursor=next_cursor))

@@ -1,6 +1,9 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from .. import i18n
 from ..atproto_service import make_persist_cb, session_to_dict
 from ..bluesky import actions as bsky_actions
 from ..bluesky import client as public_client
@@ -68,12 +71,12 @@ async def create_offer_route(request: Request, user: User | None = Depends(curre
     target_raw = target_raw.removeprefix("@")
 
     if not (is_valid_handle(target_raw) or is_valid_did(target_raw)):
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Ungültiger Handle oder DID.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Ungültiger Handle oder DID."))))
 
     try:
         target_did, target_handle, _ = await resolve_identity(target_raw)
     except Exception as exc:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=f"Account konnte nicht aufgelöst werden: {exc}")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Account konnte nicht aufgelöst werden: {fehler}", fehler=exc))))
 
     try:
         offer = await create_offer(user, target_did, target_handle, settings)
@@ -176,13 +179,13 @@ async def offer_page(request: Request, ref: str, user: User | None = Depends(cur
         elif user is None:
             action = ui_partials.LoginCta(next_url=f"/o/{ref}")
         else:
-            action = ui_partials.InfoPanel(text="Nur die angefragte Person kann diesen Tausch bestätigen.")
+            action = ui_partials.InfoPanel(text=i18n.t("Nur die angefragte Person kann diesen Tausch bestätigen."))
     elif offer.status == STATUS_COMPLETED:
-        action = ui_partials.ResultPanel(ok=True, text="Erfüllt – ihr folgt euch jetzt gegenseitig.")
+        action = ui_partials.ResultPanel(ok=True, text=i18n.t("Erfüllt – ihr folgt euch jetzt gegenseitig."))
     elif offer.status == STATUS_CANCELLED:
-        action = ui_partials.ResultPanel(ok=False, text="Dieses Angebot wurde zurückgezogen.")
+        action = ui_partials.ResultPanel(ok=False, text=i18n.t("Dieses Angebot wurde zurückgezogen."))
     else:
-        action = ui_partials.ResultPanel(ok=False, text="Dieses Angebot ist abgelaufen.")
+        action = ui_partials.ResultPanel(ok=False, text=i18n.t("Dieses Angebot ist abgelaufen."))
 
     page = offer_ui.OfferPage(
         offer=_offer_view(offer, action, notice),
@@ -200,36 +203,48 @@ async def confirm_offer_route(request: Request, offer_id: int, user: User | None
     settings = get_settings()
     result = await confirm_swap(offer_id, user.did, settings)
     if result.outcome == ConfirmOutcome.SUCCESS:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=True, text="Tausch erfüllt – ihr folgt euch jetzt gegenseitig.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=True, text=i18n.t("Tausch erfüllt – ihr folgt euch jetzt gegenseitig."))))
     if result.outcome == ConfirmOutcome.EXPIRED:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Dieses Angebot ist abgelaufen.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Dieses Angebot ist abgelaufen."))))
     if result.outcome == ConfirmOutcome.ALREADY_FINISHED:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Dieses Angebot ist bereits abgeschlossen.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Dieses Angebot ist bereits abgeschlossen."))))
     if result.outcome == ConfirmOutcome.NOT_AUTHORIZED:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Du bist nicht die angefragte Person.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Du bist nicht die angefragte Person."))))
     if result.outcome == ConfirmOutcome.TARGET_UNAVAILABLE:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Dein Account ist bei uns nicht (mehr) angemeldet.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Dein Account ist bei uns nicht (mehr) angemeldet."))))
     if result.outcome == ConfirmOutcome.OFFERER_UNAVAILABLE:
         return HTMLResponse(
-            str(ui_partials.ResultPanel(ok=False, text="Der Anbieter hat seine Anmeldung entfernt – der Tausch kann nicht abgeschlossen werden."))
+            str(ui_partials.ResultPanel(ok=False, text=i18n.t("Der Anbieter hat seine Anmeldung entfernt – der Tausch kann nicht abgeschlossen werden.")))
         )
-    return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=result.error or "Tausch fehlgeschlagen – bitte erneut versuchen.")))
+    return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=result.error or i18n.t("Tausch fehlgeschlagen – bitte erneut versuchen."))))
 
 
 @router.post("/offers/{offer_id}/cancel", dependencies=[Depends(rate_limit(10, 60))])
 async def cancel_offer_route(request: Request, offer_id: int, user: User | None = Depends(current_user)):
     if user is None:
         raise HTTPException(status_code=401, detail="Anmeldung erforderlich.")
+    settings = get_settings()
     offer = await Offer.objects.get_or_none(id=offer_id)
     if offer is None:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Angebot nicht gefunden.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Angebot nicht gefunden."))))
     if offer.offerer_did != user.did:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Nur der Anbieter kann zurückziehen.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Nur der Anbieter kann zurückziehen."))))
     if offer.status == STATUS_PENDING:
         offer.status = STATUS_CANCELLED
         offer.cancelled_at = utcnow()
         await offer.save()
-    return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Angebot zurückgezogen.")))
+        # Remove the public reply post (best effort); the offer page keeps
+        # showing "zurückgezogen" for anyone who still has the old link.
+        session = session_to_dict(user, settings)
+        try:
+            await bsky_actions.delete_record(
+                session, "app.bsky.feed.post", f"mutualsky{offer.id}",
+                settings, persist_cb=make_persist_cb(user, settings),
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Reply-Löschung für Angebot %s fehlgeschlagen: %s", offer.id, exc)
+        await user.save()
+    return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Angebot zurückgezogen."))))
 
 
 @router.post("/offers/{offer_id}/reply", dependencies=[Depends(rate_limit(5, 60))])
@@ -239,24 +254,25 @@ async def offer_public_reply_route(request: Request, offer_id: int, user: User |
     settings = get_settings()
     offer = await Offer.objects.get_or_none(id=offer_id)
     if offer is None:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Angebot nicht gefunden.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Angebot nicht gefunden."))))
     if offer.offerer_did != user.did:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Nur der Anbieter kann öffentlich antworten.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Nur der Anbieter kann öffentlich antworten."))))
     session = session_to_dict(user, settings)
     text, facets = offer_reply_payload(offer, settings)
+    rkey = f"mutualsky{offer.id}"
     try:
         await bsky_actions.reply_to_offer_post(
             session, offer.target_did, text, facets, settings,
-            persist_cb=make_persist_cb(user, settings),
+            persist_cb=make_persist_cb(user, settings), rkey=rkey,
         )
         await user.save()
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=True, text="Öffentliche Antwort auf den neuesten Post gepostet.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=True, text=i18n.t("Öffentliche Antwort auf den neuesten Post gepostet."))))
     except bsky_actions.AuthSessionError as exc:
         await user.save()
         return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=str(exc))))
     except bsky_actions.BlueskyActionError as exc:
         await user.save()
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=f"Antwort fehlgeschlagen: {exc}")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Antwort fehlgeschlagen: {fehler}", fehler=exc))))
 
 
 @router.post("/offers/{offer_id}/resend-dm", dependencies=[Depends(rate_limit(5, 60))])
@@ -266,9 +282,9 @@ async def resend_dm_route(request: Request, offer_id: int, user: User | None = D
     settings = get_settings()
     offer = await Offer.objects.get_or_none(id=offer_id)
     if offer is None:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Angebot nicht gefunden.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Angebot nicht gefunden."))))
     if offer.offerer_did != user.did:
-        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Nur der Anbieter kann eine Nachricht senden.")))
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=i18n.t("Nur der Anbieter kann eine Nachricht senden."))))
     offer.dm_status = DM_FAILED
     offer.dm_error = None
     await offer.save()

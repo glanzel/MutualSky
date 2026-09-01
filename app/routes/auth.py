@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from .. import i18n
 from ..atproto_service import client_id_for_host, generate_dpop_key, get_client_key
 from ..config import get_settings
 from ..crypto import encrypt_str
@@ -50,7 +51,7 @@ async def auth_start(request: Request):
 
     handle = _clean_handle(raw_handle)
     if not (is_valid_handle(handle) or is_valid_did(handle)):
-        return _error_redirect("Ungültiger Handle oder DID.")
+        return _error_redirect(i18n.t("Ungültiger Handle oder DID."))
 
     try:
         did, handle, did_doc = await resolve_identity(handle)
@@ -67,7 +68,7 @@ async def auth_start(request: Request):
                 raise
             authserver_meta = await oauth.fetch_authserver_meta(authserver_url)
     except Exception as exc:
-        return _error_redirect(f"Identität konnte nicht aufgelöst werden: {exc}")
+        return _error_redirect(i18n.t("Identität konnte nicht aufgelöst werden: {fehler}", fehler=exc))
 
     client_id, redirect_uri = client_id_for_host(request, settings)
     dpop_private_jwk = generate_dpop_key()
@@ -87,7 +88,7 @@ async def auth_start(request: Request):
             raise RuntimeError(f"PAR HTTP {resp.status_code}: {resp.text[:300]}")
         par_request_uri = resp.json()["request_uri"]
     except Exception as exc:
-        return _error_redirect(f"Anmeldung fehlgeschlagen: {exc}")
+        return _error_redirect(i18n.t("Anmeldung fehlgeschlagen: {fehler}", fehler=exc))
 
     oauth_state_store.put(
         state,
@@ -147,11 +148,11 @@ async def auth_callback(request: Request):
     # Identity verification: the "sub" must match the requested account.
     expected_did = auth_request["did"]
     if tokens.get("sub") != expected_did:
-        return _error_redirect("Angemeldeter Account entspricht nicht der Anfrage.")
+        return _error_redirect(i18n.t("Angemeldeter Account entspricht nicht der Anfrage."))
 
     granted_scope = tokens.get("scope", "")
     if "atproto" not in granted_scope:
-        return _error_redirect("Erforderliche atproto-Berechtigung fehlt.")
+        return _error_redirect(i18n.t("Erforderliche atproto-Berechtigung fehlt."))
 
     from ..atproto_service import apply_token_updates
 

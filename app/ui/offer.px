@@ -1,5 +1,6 @@
 from pyjsx import JSX, jsx
 
+from .. import i18n
 from .components import Layout, StatusBadge
 
 
@@ -16,9 +17,9 @@ def OfferPage(*, children=None, offer=None, viewer=None, offerer_profile=None, t
 
     dm_line = None
     if dm_status == "failed":
-        dm_line = <p class="muted">DM konnte nicht zugestellt werden.</p>
+        dm_line = <p class="muted">{i18n.t("DM konnte nicht zugestellt werden.")}</p>
     elif dm_status == "sent":
-        dm_line = <p class="muted">Benachrichtigung per Bluesky-DM gesendet.</p>
+        dm_line = <p class="muted">{i18n.t("Benachrichtigung per Bluesky-DM gesendet.")}</p>
 
     return (
         <Layout title={title} user={viewer}>
@@ -29,9 +30,7 @@ def OfferPage(*, children=None, offer=None, viewer=None, offerer_profile=None, t
                     <AvatarFromProfile profile={target_profile} handle={offer.get("target_handle", "")} />
                 </div>
                 <p class="swap-text">
-                    <strong>@{offer.get("offerer_handle", "")}</strong> möchte
-                    <strong> @{offer.get("target_handle", "")}</strong> folgen,
-                    wenn <strong>@{offer.get("target_handle", "")}</strong> zurückfolgt.
+                    {i18n.t("{offerer} möchte {target} folgen, wenn {target} zurückfolgt.", offerer=("@" + offer.get("offerer_handle", "")), target=("@" + offer.get("target_handle", "")))}
                 </p>
                 <div class="offer-statusline">
                     {badge}
@@ -57,9 +56,9 @@ def Offer404(*, children=None, user=None) -> JSX:
     return (
         <Layout title="Nicht gefunden – MutualSky" user={user}>
             <div class="card">
-                <h1>Angebot nicht gefunden</h1>
-                <p class="muted">Dieses Follow-Swap-Angebot existiert nicht (mehr).</p>
-                <a class="btn btn-ghost" href="/">Zur Startseite</a>
+                <h1>{i18n.t("Angebot nicht gefunden")}</h1>
+                <p class="muted">{i18n.t("Dieses Follow-Swap-Angebot existiert nicht (mehr).")}</p>
+                <a class="btn btn-ghost" href="/">{i18n.t("Zur Startseite")}</a>
             </div>
         </Layout>
     )
