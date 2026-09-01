@@ -1,0 +1,366 @@
+from pyjsx import HTMLDontEscape, JSX, jsx
+
+from datetime import datetime
+
+from .. import i18n
+
+GOOD_TEXT_CLASS = {"pending": "badge", "processing": "badge", "completed": "badge badge-ok", "cancelled": "badge badge-muted", "expired": "badge badge-muted"}
+
+
+def _fmt_count(n) -> str:
+    if n is None:
+        return "–"
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return str(n)
+    if n >= 1_000_000:
+        v = n / 1_000_000
+        return f"{v:.1f}".rstrip("0").rstrip(".") + "M"
+    if n >= 1_000:
+        v = n / 1_000
+        return f"{v:.1f}".rstrip("0").rstrip(".") + "k"
+    return str(n)
+
+
+def _fmt_date(ts) -> str | None:
+    if not ts:
+        return None
+    try:
+        iso = ts.replace("Z", "+00:00") if isinstance(ts, str) else ts
+        dt = datetime.fromisoformat(iso).astimezone()
+    except (ValueError, TypeError):
+        return str(ts)
+    return dt.strftime("%d.%m.%Y %H:%M")
+
+
+def Layout(*, children=None, title="MutualSky", user=None) -> JSX:
+    nav_right = None
+    if user:
+        handle = user.get("handle", "")
+        bsky_url = "https://bsky.app/profile/" + handle
+        nav_right = <div class="user-nav">
+            <a href="/archiv">{i18n.t("Archiv")}</a>
+            <a href={bsky_url} target="_blank" rel="noopener">{handle}</a>
+            <form method="post" action="/auth/logout">
+                <button type="submit" class="btn btn-ghost">{i18n.t("Abmelden")}</button>
+            </form>
+        </div>
+    else:
+        nav_right = <a class="btn btn-primary" href="/auth/login">{i18n.t("Mit Bluesky anmelden")}</a>
+
+    show_lang = "en" if i18n.get_locale() == "de" else "de"
+    lang_label = "English" if show_lang == "en" else "Deutsch"
+
+    return (
+        <html lang={i18n.get_locale()}>
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>{title}</title>
+                <link rel="stylesheet" href="/static/style.css" />
+                <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+            </head>
+            <body>
+                <header class="site-header">
+                    <nav class="site-nav">
+                        <a class="logo" href="/">MutualSky <span class="beta">Beta</span></a>
+                        {nav_right}
+                        <button type="button" class="btn btn-ghost lang-switch"
+                                onclick={"location='/lang/" + show_lang + "?next='+encodeURIComponent(location.pathname)"}>{lang_label}</button>
+                    </nav>
+                </header>
+                <main class="container">
+                    {children}
+                </main>
+                <footer class="footer">
+                    <p>{i18n.t("Freundschaft auf dem Atmosphere – MutualSky")}</p>
+                    <a href="https://github.com/glanzel/MutualSky" target="_blank" rel="noopener">{i18n.t("Open Source auf GitHub ansehen")}</a>
+                </footer>
+            </body>
+        </html>
+    )
+
+
+def StatusBadge(*, children=None, status="") -> JSX:
+    cls = GOOD_TEXT_CLASS.get(status, "badge")
+    return <span class={cls}>{children}</span>
+
+
+def SearchForm(*, children=None, query="", max_followers="") -> JSX:
+    return (
+        <form class="search-form" hx-post="/profiles/search" hx-target="#search-results" hx-swap="innerHTML">
+            <input type="search" name="q" placeholder={i18n.t("Suche einen Bluesky-Account… (z. B. anna.bsky.social)")} value={query} required />
+            <input type="number" name="max_followers" min="0" step="1" placeholder={i18n.t("max. Follower")} value={max_followers} />
+            <button type="submit" class="btn btn-primary">{i18n.t("Suchen")}</button>
+        </form>
+    )
+
+
+def _load_more_vals(query, max_followers, cursor) -> HTMLDontEscape:
+    import json as _json
+    vals = _json.dumps(
+        {"q": query, "max_followers": max_followers or "", "cursor": cursor or ""},
+        separators=(",", ":"),
+    )
+    return HTMLDontEscape(vals)
+
+
+def _more_button() -> JSX:
+    return <button type="button" class="btn btn-ghost load-more-btn">{i18n.t("Weitere Ergebnisse laden")}</button>
+
+
+def SearchTabs(*, children=None, user=None, title="Accounts suchen") -> JSX:
+    accounts_panel = (
+        <div class="search-panel" data-panel="accounts">
+            <SearchForm />
+            <div id="search-results"></div>
+        </div>
+    )
+    if user:
+        posts_panel = (
+            <div class="search-panel hidden" data-panel="posts">
+                <PostSearchForm />
+                <div id="post-results"></div>
+            </div>
+        )
+    else:
+        posts_panel = (
+            <div class="search-panel hidden" data-panel="posts">
+                <p class="muted">{i18n.t("Die Post-Suche braucht eine Anmeldung.")}</p>
+                <a class="btn btn-primary" href="/auth/login">{i18n.t("Mit Bluesky anmelden")}</a>
+            </div>
+        )
+    return (
+        <section class="card search-section search-tabs-root">
+            <h2>{title}</h2>
+            <div class="search-tabs">
+                <button type="button" class="search-tab active" data-tab="accounts" onclick="mutualskyTab(event)">{i18n.t("Accounts")}</button>
+                <button type="button" class="search-tab" data-tab="posts" onclick="mutualskyTab(event)">{i18n.t("Post/Account")}</button>
+            </div>
+            {accounts_panel}
+            {posts_panel}
+            <script src="/static/tabs.js" defer></script>
+        </section>
+    )
+
+
+def PostSearchForm(*, children=None, query="", max_followers="") -> JSX:
+    return (
+        <form class="search-form" hx-post="/posts/search" hx-target="#post-results" hx-swap="innerHTML">
+            <input type="search" name="q" placeholder={i18n.t("Suche Posts… (z. B. Klima)")} value={query} required />
+            <input type="number" name="max_followers" min="0" step="1" placeholder={i18n.t("max. Follower-Autor")} value={max_followers} />
+            <button type="submit" class="btn btn-primary">{i18n.t("Post/Account suchen")}</button>
+        </form>
+    )
+
+
+def PostRow(*, children=None, post=None) -> JSX:
+    author = post.get("author") or {}
+    handle = author.get("handle", "")
+    display = author.get("displayName") or handle or "?"
+    avatar = author.get("avatar")
+    record = post.get("record") or {}
+    text = str(record.get("text", "") or "")
+    created = _fmt_date(record.get("createdAt") or post.get("indexedAt"))
+    last_active = _fmt_date(author.get("indexedAt"))
+
+    stats = []
+    if author.get("followersCount") is not None:
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(author.get("followersCount"))}</strong> {i18n.t("Follower")}</span>)
+    if author.get("postsCount") is not None:
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(author.get("postsCount"))}</strong> {i18n.t("Beiträge")}</span>)
+    if last_active:
+        stats.append(<span class="actor-stat muted">{i18n.t("zuletzt aktiv: {when}", when=last_active)}</span>)
+    if created:
+        stats.append(<span class="actor-stat muted">{i18n.t("Post vom {when}", when=created)}</span>)
+
+    return (
+        <div class="card post-row">
+            <Avatar url={avatar} name={display} />
+            <div class="actor-info">
+                <a class="actor-name" href={"/profile/" + handle}>{display}</a>
+                <span class="actor-handle">@{handle}</span>
+                <p class="post-text">{text}</p>
+                <div class="actor-stats">{stats}</div>
+            </div>
+            <a class="btn btn-primary" href={"/profile/" + handle}>{i18n.t("Profil")}</a>
+        </div>
+    )
+
+
+def PostResults(*, children=None, posts=None, max_followers=None, query="", cursor=None) -> JSX:
+    if posts:
+        cards = []
+        for post in posts:
+            cards.append(<PostRow post={post} />)
+        list_block = <div class="actor-list">{cards}</div>
+    else:
+        if max_followers:
+            list_block = <p class="muted">{i18n.t("Keine Posts von Autoren mit höchstens {max_followers} Followern gefunden.", max_followers=max_followers)}</p>
+        else:
+            list_block = <p class="muted">{i18n.t("Keine Ergebnisse.")}</p>
+    more = None
+    if cursor:
+        more = (
+            <div class="load-more"
+                 hx-post="/posts/search/more"
+                 hx-target="closest .load-more"
+                 hx-swap="outerHTML"
+                 hx-vals={_load_more_vals(query, max_followers, cursor)}>
+                {_more_button()}
+            </div>
+        )
+    return (
+        <div class="search-results-block">
+            {list_block}
+            {more}
+        </div>
+    )
+
+
+def MorePostResults(*, children=None, posts=None, max_followers=None, query="", cursor=None) -> JSX:
+    if not posts:
+        return <p class="muted load-more-end">{i18n.t("Keine weiteren Ergebnisse.")}</p>
+    cards = []
+    for post in posts:
+        cards.append(<PostRow post={post} />)
+    list_block = <div class="actor-list">{cards}</div>
+    inner = _more_button() if cursor else <p class="muted load-more-end">{i18n.t("Ende der Ergebnisse.")}</p>
+    return (
+        <div class="load-more"
+             hx-post="/posts/search/more"
+             hx-target="closest .load-more"
+             hx-swap="outerHTML"
+             hx-vals={_load_more_vals(query, max_followers, cursor)}>
+            {list_block}
+            {inner}
+        </div>
+    )
+
+
+def SearchResults(*, children=None, actors=None, max_followers=None, query="", cursor=None) -> JSX:
+    if actors:
+        cards = []
+        for actor in actors:
+            cards.append(<ActorCard actor={actor} />)
+        list_block = <div class="actor-list">{cards}</div>
+    else:
+        if max_followers:
+            list_block = <p class="muted">{i18n.t("Keine Accounts mit höchstens {max_followers} Followern gefunden.", max_followers=max_followers)}</p>
+        else:
+            list_block = <p class="muted">{i18n.t("Keine Ergebnisse.")}</p>
+    more = None
+    if cursor:
+        more = (
+            <div class="load-more"
+                 hx-post="/profiles/search/more"
+                 hx-target="closest .load-more"
+                 hx-swap="outerHTML"
+                 hx-vals={_load_more_vals(query, max_followers, cursor)}>
+                {_more_button()}
+            </div>
+        )
+    return (
+        <div class="search-results-block">
+            {list_block}
+            {more}
+        </div>
+    )
+
+
+def MoreResults(*, children=None, actors=None, max_followers=None, query="", cursor=None) -> JSX:
+    if not actors:
+        return <p class="muted load-more-end">{i18n.t("Keine weiteren Ergebnisse.")}</p>
+    cards = []
+    for actor in actors:
+        cards.append(<ActorCard actor={actor} />)
+    list_block = <div class="actor-list">{cards}</div>
+    inner = _more_button() if cursor else <p class="muted load-more-end">{i18n.t("Ende der Ergebnisse.")}</p>
+    return (
+        <div class="load-more"
+             hx-post="/profiles/search/more"
+             hx-target="closest .load-more"
+             hx-swap="outerHTML"
+             hx-vals={_load_more_vals(query, max_followers, cursor)}>
+            {list_block}
+            {inner}
+        </div>
+    )
+
+
+def ActorCard(*, children=None, actor=None) -> JSX:
+    handle = actor.get("handle", "")
+    did = actor.get("did", "")
+    display = actor.get("displayName") or handle
+    avatar = actor.get("avatar")
+    description = actor.get("description") or ""
+    last_active = _fmt_date(actor.get("indexedAt"))
+
+    stats = []
+    if actor.get("followersCount") is not None:
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("followersCount"))}</strong> {i18n.t("Follower")}</span>)
+    if actor.get("followsCount") is not None:
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("followsCount"))}</strong> {i18n.t("folgt")}</span>)
+    if actor.get("postsCount") is not None:
+        stats.append(<span class="actor-stat"><strong>{_fmt_count(actor.get("postsCount"))}</strong> {i18n.t("Beiträge")}</span>)
+    if last_active:
+        stats.append(<span class="actor-stat muted">{i18n.t("zuletzt aktiv: {when}", when=last_active)}</span>)
+
+    bio = None
+    if description:
+        bio = <p class="actor-bio">{description}</p>
+
+    stats_row = <div class="actor-stats">{stats}</div> if stats else None
+
+    return (
+        <div class="card actor-card">
+            <Avatar url={avatar} name={display} />
+            <div class="actor-info">
+                <a class="actor-name" href={"/profile/" + handle}>{display}</a>
+                <span class="actor-handle">@{handle}</span>
+                {stats_row}
+                {bio}
+            </div>
+            <a class="btn btn-primary" href={"/profile/" + handle}>{i18n.t("Profil")}</a>
+        </div>
+    )
+
+
+def Avatar(*, children=None, url=None, name="", size="md") -> JSX:
+    if url:
+        return <img class={"avatar avatar-" + size} src={url} alt={name} loading="lazy" />
+    return <div class={"avatar avatar-" + size + " avatar-placeholder"}>{name[:1].upper() if name else "?"}</div>
+
+
+def OfferRow(*, children=None, offer=None, role="offerer") -> JSX:
+    status = offer.get("status", "") if isinstance(offer, dict) else getattr(offer, "status", "")
+    if isinstance(offer, dict):
+        other_handle = offer.get("target_handle") if role == "offerer" else offer.get("offerer_handle")
+        did = offer.get("target_did") if role == "offerer" else offer.get("offerer_did")
+        offer_id = offer.get("id")
+    else:
+        other_handle = offer.target_handle if role == "offerer" else offer.offerer_handle
+        did = offer.target_did if role == "offerer" else offer.offerer_did
+        offer_id = offer.id
+
+    label = i18n.t("Folge ich an:") if role == "offerer" else i18n.t("Bietet mir an:")
+    badge = StatusBadge(status=status)
+    offer_url = offer.get("offer_url") or ("/o/" + str(offer_id))
+    return (
+        <li class="offer-row">
+            <Avatar name={other_handle} />
+            <div class="offer-info">
+                <span class="muted">{label}</span>
+                <strong>@{other_handle or did}</strong>
+            </div>
+            <div class="offer-actions">
+                {badge}
+                <a class="btn btn-ghost" href={offer_url}>{i18n.t("Ansehen")}</a>
+            </div>
+        </li>
+    )
+
+
+def Notice(*, children=None, kind="error") -> JSX:
+    return <p class={"notice notice-" + kind}>{children}</p>

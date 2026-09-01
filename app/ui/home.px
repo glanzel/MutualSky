@@ -1,0 +1,107 @@
+from pyjsx import JSX, jsx
+
+from .. import i18n
+from .components import Layout, SearchTabs, StatusBadge, OfferRow
+
+
+def LandingPage(*, children=None, title="MutualSky") -> JSX:
+    return (
+        <Layout title={title} user={None}>
+            <section class="hero">
+                <h1>{i18n.t("Freundschaft auf dem Atmosphere")}</h1>
+                <p class="lede">
+                    {i18n.t("Folge gezielt neuen Accounts – und du bekommst einen Follow zurück, wenn du einem zurückfolgst. Tausche Follows mit Bluesky, fair und automatisch.")}
+                </p>
+                <a class="btn btn-primary btn-lg" href="/auth/login">{i18n.t("Mit Bluesky anmelden")}</a>
+            </section>
+            <section class="howto">
+                <h2>{i18n.t("So funktioniert es")}</h2>
+                <ol>
+                    <li><strong>{i18n.t("Anmelden")}</strong> – {i18n.t("mit deinem Bluesky-Account (OAuth, du behältst die Kontrolle).")}</li>
+                    <li><strong>{i18n.t("Auswählen")}</strong> – {i18n.t("suche einen Account, dem du folgen möchtest.")}</li>
+                    <li><strong>{i18n.t("Anbieten")}</strong> – {i18n.t("sende ein Follow-Swap-Angebot. Die Person bekommt eine Nachricht.")}</li>
+                    <li><strong>{i18n.t("Bestätigen")}</strong> – {i18n.t("folgt sie dir zurück und bestätigt den Tausch, werden beide Follows sofort gesetzt.")}</li>
+                </ol>
+            </section>
+        </Layout>
+    )
+
+
+def LoginPage(*, children=None, error="", next_url="") -> JSX:
+    error_box = None
+    if error:
+        error_box = <p class="notice notice-error">{error}</p>
+    return (
+        <Layout title="Anmelden – MutualSky" user={None}>
+            <section class="card login-card">
+                <h1>{i18n.t("Mit Bluesky anmelden")}</h1>
+                <p class="muted">{i18n.t("Gib deinen Bluesky-Handle ein – du wirst zur Bluesky-Anmeldeseite weitergeleitet und bestimmst dort selbst, welche Rechte du erteilst.")}</p>
+                {error_box}
+                <form method="post" action="/auth/start" class="login-form">
+                    <input type="hidden" name="next" value={next_url} />
+                    <input type="text" name="handle" placeholder={i18n.t("z. B. anna.bsky.social")} required />
+                    <button type="submit" class="btn btn-primary">{i18n.t("Weiter zu Bluesky")}</button>
+                </form>
+            </section>
+        </Layout>
+    )
+
+
+def Dashboard(
+    *,
+    children=None,
+    user=None,
+    outgoing=None,
+    incoming=None,
+    title="Dashboard – MutualSky",
+) -> JSX:
+    out_items = [<li><OfferRow offer={offer} role="offerer" /></li> for offer in outgoing or []]
+    in_items = [<li><OfferRow offer={offer} role="target" /></li> for offer in incoming or []]
+    empty_out = <li><p class="muted">{i18n.t("Noch keine Angebote – suche unten einen Account.")}</p></li>
+    empty_in = <li><p class="muted">{i18n.t("Noch keine Angebote an dich.")}</p></li>
+
+    outgoing_box = (
+        <section class="card">
+            <h2>{i18n.t("Von mir angeboten")}</h2>
+            <ul class="offer-list">{out_items or [empty_out]}</ul>
+        </section>
+    )
+    incoming_box = (
+        <section class="card">
+            <h2>{i18n.t("Eingegangene Angebote")}</h2>
+            <ul class="offer-list">{in_items or [empty_in]}</ul>
+        </section>
+    )
+
+    return (
+        <Layout title={title} user={user}>
+            <h1>{i18n.t("Hallo, @{handle}", handle=user.get("handle", ""))}</h1>
+            <div class="grid">
+                {outgoing_box}
+                {incoming_box}
+            </div>
+            <SearchTabs user={user} title={i18n.t("Account suchen")} />
+        </Layout>
+    )
+
+
+def ArchivePage(*, children=None, user=None, outgoing=None, incoming=None, title="Archiv – MutualSky") -> JSX:
+    out_items = [<li><OfferRow offer={offer} role="offerer" /></li> for offer in outgoing or []]
+    in_items = [<li><OfferRow offer={offer} role="target" /></li> for offer in incoming or []]
+    empty = <li><p class="muted">{i18n.t("Noch keine abgeschlossenen Angebote.")}</p></li>
+
+    return (
+        <Layout title={title} user={user}>
+            <h1>{i18n.t("Archiv")}</h1>
+            <div class="grid">
+                <section class="card">
+                    <h2>{i18n.t("Abgeschlossene Angebote von mir")}</h2>
+                    <ul class="offer-list">{out_items or [empty]}</ul>
+                </section>
+                <section class="card">
+                    <h2>{i18n.t("Abgeschlossene Angebote an mich")}</h2>
+                    <ul class="offer-list">{in_items or [empty]}</ul>
+                </section>
+            </div>
+        </Layout>
+    )
