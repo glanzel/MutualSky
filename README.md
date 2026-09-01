@@ -51,6 +51,21 @@ docker build -t mutualsky .
 docker run -d -p 8000:8000 -v mutualsky-data:/data --env-file .env mutualsky
 ```
 
+### Docker Compose (Coolify)
+
+A `docker-compose.yml` is provided. Environment and the SQLite database both live in the `data/` directory, which is mounted as a volume:
+
+```bash
+cp data/.env.example data/.env   # fill in real values
+docker compose up -d --build
+```
+
+Before starting the app the first time, apply the migrations inside the container:
+
+```bash
+docker compose run --rm app /app/.venv/bin/oxyde migrate
+```
+
 5. **Verify before going live:** `curl https://your.domain/bsky-oauth-client.json` – the value of `client_id` in the document must exactly match the fetch URL. Then sign in once with a real account.
 
 ### Important: domain change
