@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
+from ..atproto_service import make_persist_cb, session_to_dict
+from ..bluesky import actions as bsky_actions
 from ..bluesky import client as public_client
+from ..config import get_settings
 from ..deps import current_user
 from ..models import User
 from ..offers import pending_offer_between
@@ -17,13 +20,32 @@ router = APIRouter()
 async def search_profiles(request: Request):
     form = await request.form()
     query = str(form.get("q", "")).strip()
+    raw_max = str(form.get("max_followers", "")).strip()
+    max_followers = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
     if not query:
-        return HTMLResponse(str(ui_components.SearchResults(actors=[])))
+        return HTMLResponse(str(ui_components.SearchResults(actors=[], max_followers=max_followers)))
     try:
-        actors = await public_client.search_actors(query)
+        actors, cursor = await public_client.search_profiles(query, max_followers=max_followers)
     except public_client.PublicBskyError as exc:
         return HTMLResponse(str(ui_components.Notice(kind="error", children=[f"Suche fehlgeschlagen: {exc}"])))
-    return HTMLResponse(str(ui_components.SearchResults(actors=actors)))
+    return HTMLResponse(
+        str(ui_components.SearchResults(actors=actors, max_followers=max_followers, query=query, cursor=cursor))
+    )
+
+
+@router.post("/profiles/search/more", dependencies=[Depends(rate_limit(60, 60))])
+async def search_profiles_more(request: Request):
+    form = await request.form()
+    query = str(form.get("q", "")).strip()
+    raw_max = str(form.get("max_followers", "")).strip()
+    max_followers = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
+    cursor = str(form.get("cursor", "")).strip()
+    if not query or not cursor:
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=["Such-Sitzung abgelaufen."])))
+    actors, next_cursor = await public_client.search_profiles(query, max_followers=max_followers, cursor=cursor)
+    return HTMLResponse(
+        str(ui_components.MoreResults(actors=actors, max_followers=max_followers, query=query, cursor=next_cursor))
+    )
 
 
 @router.get("/profile/{handle}", response_class=HTMLResponse)
@@ -76,3 +98,60 @@ async def profile_page(request: Request, handle: str, user: User | None = Depend
         notice=notice,
     )
     return str(page)
+
+
+@router.post("/posts/search", dependencies=[Depends(rate_limit(20, 60))])
+async def search_posts_route(request: Request, user: User | None = Depends(current_user)):
+    if user is None:
+        return HTMLResponse(str(ui_partials.LoginCta(next_url="/")))
+    settings = get_settings()
+    session = session_to_dict(user, settings)
+    form = await request.form()
+    query = str(form.get("q", "")).strip()
+    raw_max = str(form.get("max_followers", "")).strip()
+    max_followers = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
+    if not query:
+        return HTMLResponse(str(ui_components.PostResults(posts=[], max_followers=max_followers)))
+    try:
+        posts, cursor = await bsky_actions.search_posts(
+            session, query, settings, persist_cb=make_persist_cb(user, settings)
+        )
+    except bsky_actions.AuthSessionError as exc:
+        return HTMLResponse(
+            str(ui_components.Notice(kind="error", children=[str(exc), ' '])) + '<a class="btn btn-primary" href="/auth/login">Erneut anmelden</a>'
+        )
+    except bsky_actions.BlueskyActionError as exc:
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=[f"Post-Suche fehlgeschlagen: {exc}"])))
+    posts = await public_client.enrich_posts_authors(posts, max_followers=max_followers)
+    return HTMLResponse(
+        str(ui_components.PostResults(posts=posts, max_followers=max_followers, query=query, cursor=cursor))
+    )
+
+
+@router.post("/posts/search/more", dependencies=[Depends(rate_limit(60, 60))])
+async def search_posts_more(request: Request, user: User | None = Depends(current_user)):
+    if user is None:
+        return HTMLResponse(str(ui_partials.LoginCta(next_url="/")))
+    settings = get_settings()
+    session = session_to_dict(user, settings)
+    form = await request.form()
+    query = str(form.get("q", "")).strip()
+    raw_max = str(form.get("max_followers", "")).strip()
+    max_followers = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
+    cursor = str(form.get("cursor", "")).strip()
+    if not query or not cursor:
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=["Such-Sitzung abgelaufen."])))
+    try:
+        posts, next_cursor = await bsky_actions.search_posts(
+            session, query, settings, persist_cb=make_persist_cb(user, settings), cursor=cursor
+        )
+    except bsky_actions.AuthSessionError as exc:
+        return HTMLResponse(
+            str(ui_components.Notice(kind="error", children=[str(exc), ' '])) + '<a class="btn btn-primary" href="/auth/login">Erneut anmelden</a>'
+        )
+    except bsky_actions.BlueskyActionError as exc:
+        return HTMLResponse(str(ui_components.Notice(kind="error", children=[f"Post-Suche fehlgeschlagen: {exc}"])))
+    posts = await public_client.enrich_posts_authors(posts, max_followers=max_followers)
+    return HTMLResponse(
+        str(ui_components.MorePostResults(posts=posts, max_followers=max_followers, query=query, cursor=next_cursor))
+    )

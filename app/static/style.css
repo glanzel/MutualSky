@@ -188,11 +188,22 @@ a:hover {
 
 .search-form, .login-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   max-width: 560px;
 }
 
-input[type="search"], input[type="text"], input[type="password"], select {
+.search-form input[type="number"] {
+  flex: 0 0 150px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+input[type="search"], input[type="text"], input[type="password"], input[type="number"], select {
   flex: 1;
   padding: 10px 12px;
   border-radius: 8px;
@@ -215,7 +226,7 @@ input:focus {
 
 .actor-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
 }
 
@@ -233,6 +244,93 @@ input:focus {
 .actor-handle {
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.actor-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 6px;
+  font-size: 0.85rem;
+}
+
+.actor-stat strong {
+  margin-right: 4px;
+}
+
+.actor-stat.muted {
+  color: var(--muted);
+}
+
+.actor-bio {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  max-width: 56ch;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: pre-wrap;
+}
+
+.search-results-block {
+  margin-top: 12px;
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.load-more-end {
+  text-align: center;
+  padding: 4px 0;
+}
+
+.search-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-tab {
+  padding: 8px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.search-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--sky);
+  font-weight: 700;
+}
+
+.search-panel.hidden {
+  display: none;
+}
+
+.post-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.post-text {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  white-space: pre-wrap;
 }
 
 .avatar {

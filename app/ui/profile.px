@@ -1,6 +1,6 @@
 from pyjsx import JSX, jsx
 
-from .components import Avatar, Layout, SearchForm
+from .components import Avatar, Layout, SearchTabs
 
 
 def ProfilePage(*, children=None, profile=None, viewer=None, action=None, notice="", title=None) -> JSX:
@@ -51,11 +51,7 @@ def ProfilePage(*, children=None, profile=None, viewer=None, action=None, notice
             <div id="offer-action">
                 {action}
             </div>
-            <section class="card search-section">
-                <h2>Weitere Accounts suchen</h2>
-                <SearchForm />
-                <div id="search-results"></div>
-            </section>
+            <SearchTabs user={viewer} title="Weitere Accounts suchen" />
         </Layout>
     )
 

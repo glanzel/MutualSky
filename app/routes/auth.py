@@ -55,8 +55,17 @@ async def auth_start(request: Request):
     try:
         did, handle, did_doc = await resolve_identity(handle)
         pds_url = pds_endpoint(did_doc)
-        authserver_url = await oauth.resolve_pds_authserver(pds_url)
-        authserver_meta = await oauth.fetch_authserver_meta(authserver_url)
+        try:
+            authserver_url = await oauth.resolve_pds_authserver(pds_url)
+            authserver_meta = await oauth.fetch_authserver_meta(authserver_url)
+        except Exception:
+            # The account's PDS may be temporarily unreachable. Fall back to the
+            # last verified auth server for this account (stored at login).
+            stashed = await User.objects.get_or_none(did=did)
+            authserver_url = stashed.authserver_iss if stashed else None
+            if not authserver_url:
+                raise
+            authserver_meta = await oauth.fetch_authserver_meta(authserver_url)
     except Exception as exc:
         return _error_redirect(f"Identität konnte nicht aufgelöst werden: {exc}")
 
@@ -100,7 +109,7 @@ async def auth_start(request: Request):
     if not is_safe_url(auth_url):
         return RedirectResponse("/auth/login?error=Falscher Authorization-Endpoint.", status_code=303)
     qparam = urlencode({"client_id": client_id, "request_uri": par_request_uri})
-    return RedirectResponse(f"{auth_url}?{qparam}")
+    return RedirectResponse(f"{auth_url}?{qparam}", status_code=303)
 
 
 @router.get("/auth/callback")

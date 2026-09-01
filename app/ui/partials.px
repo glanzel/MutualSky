@@ -28,15 +28,21 @@ def ResultPanel(*, children=None, ok=False, text="") -> JSX:
     return <div class="panel"><p class={cls}>{text}</p><a class="btn btn-ghost" href="/">Zum Dashboard</a></div>
 
 
-def CancelPanel(*, children=None, cancel_url="", resend_url="", dm_failed=False) -> JSX:
-    resend = None
-    if dm_failed:
-        resend = <button class="btn btn-ghost" hx-post={resend_url} hx-swap="outerHTML" hx-target="#offer-action">DM erneut senden</button>
+def CancelPanel(*, children=None, cancel_url="", resend_url="", dm_failed=False, reply_url="") -> JSX:
+    actions = []
+    if dm_failed and resend_url:
+        actions.append(
+            <button class="btn btn-ghost" hx-post={resend_url} hx-swap="outerHTML" hx-target="#offer-action">DM erneut senden</button>
+        )
+    if dm_failed and reply_url:
+        actions.append(
+            <button class="btn btn-ghost" hx-post={reply_url} hx-swap="outerHTML" hx-target="#offer-action">Öffentlich als Antwort posten</button>
+        )
     return (
         <div class="panel">
             <p class="muted">Du wartest darauf, dass die Person das Angebot bestätigt.</p>
             <button class="btn btn-ghost" hx-post={cancel_url} hx-swap="outerHTML" hx-target="#offer-action">Angebot zurückziehen</button>
-            {resend}
+            {actions}
         </div>
     )
 
@@ -53,11 +59,20 @@ def OfferStartButton(*, children=None, target_handle="") -> JSX:
     )
 
 
-def OfferCreatedPanel(*, children=None, offer_url="") -> JSX:
+def OfferCreatedPanel(*, children=None, offer_url="", dm_failed=False, dm_error="", reply_url="") -> JSX:
+    notice = None
+    reply_btn = None
+    if dm_failed:
+        detail = f" – {dm_error}" if dm_error else ""
+        notice = <p class="notice notice-error">Angebot erstellt, aber die DM-Benachrichtigung fehlgeschlagen.{detail}</p>
+        if reply_url:
+            reply_btn = <button class="btn btn-ghost" hx-post={reply_url} hx-swap="outerHTML" hx-target="closest .panel">Öffentlich als Antwort posten</button>
     return (
         <div class="panel">
-            <p class="notice notice-ok">Angebot erstellt und per DM gesendet.</p>
+            <p class="notice notice-ok">Angebot erstellt {"" if dm_failed else "und per DM gesendet"}.</p>
+            {notice}
             <a class="btn btn-primary" href={offer_url}>Angebot ansehen</a>
+            {reply_btn}
         </div>
     )
 

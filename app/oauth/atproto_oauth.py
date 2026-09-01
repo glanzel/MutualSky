@@ -284,7 +284,14 @@ async def refresh_token_request(
         post_data=params,
     )
 
-    resp.raise_for_status()
+    if resp.status_code != 200:
+        detail = ""
+        try:
+            detail = str(resp.json().get("error_description") or resp.json().get("error") or "")
+        except Exception:
+            detail = resp.text[:200]
+        raise RuntimeError(f"Token-Refresh fehlgeschlagen (HTTP {resp.status_code}): {detail}")
+
     return resp.json(), dpop_authserver_nonce
 
 
@@ -295,13 +302,16 @@ async def pds_authed_req(
     url: str,
     user: dict,
     body: dict | None = None,
+    method: str = "POST",
+    params: dict | None = None,
     headers: dict | None = None,
     persist_cb: PersistCB | None = None,
 ) -> Any:
-    """POST to the user's PDS using DPoP + access token (with nonce retry).
+    """Request the user's PDS using DPoP + access token (with nonce retry).
 
-    ``persist_cb`` is invoked when the PDS rotates the DPoP nonce so the caller
-    can persist it immediately.
+    ``method`` may be "POST" (``body``) or "GET" (``params``). ``persist_cb``
+    is invoked when the PDS rotates the DPoP nonce so the caller can persist it
+    immediately.
     """
     dpop_private_jwk = load_dpop_key(user["dpop_private_jwk"])
     dpop_pds_nonce = user["dpop_pds_nonce"]
@@ -309,7 +319,7 @@ async def pds_authed_req(
 
     for _ in range(2):
         dpop_jwt_header = dpop_jwt(
-            "POST",
+            method,
             url,
             access_token=access_token,
             nonce=dpop_pds_nonce,
@@ -321,7 +331,10 @@ async def pds_authed_req(
         }
         if headers:
             final_headers |= headers
-        resp = await safe_post(url, json=body, headers=final_headers)
+        if method.upper() == "POST":
+            resp = await safe_post(url, json=body, headers=final_headers)
+        else:
+            resp = await safe_get(url, params=params, headers=final_headers)
 
         if is_use_dpop_nonce_error_response(resp):
             new_nonce = resp.headers.get("DPoP-Nonce")

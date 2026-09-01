@@ -18,7 +18,15 @@ from ..models import (
     utcnow,
 )
 from ..oauth.atproto_identity import is_valid_did, is_valid_handle, resolve_identity
-from ..offers import OfferError, create_offer, lazy_expire, link_for
+from ..offers import (
+    OfferError,
+    create_offer,
+    lazy_expire,
+    link_for,
+    offer_dm_payload,
+    offer_reply_payload,
+    verify_offer_ref,
+)
 from ..security import rate_limit
 from ..ui import components as ui_components
 from ..ui import offer as offer_ui
@@ -73,30 +81,69 @@ async def create_offer_route(request: Request, user: User | None = Depends(curre
         return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=str(exc))))
 
     # Notify the target per DM (best effort).
+    offer_dm_failed = False
+    offer_dm_error = ""
+    skip_reason = None
     if settings.dm_enabled and "chat.bsky" in (user.scope or ""):
-        session = session_to_dict(user, settings)
-        message = (
-            f"MutualSky: @{user.handle} bietet dir einen Follow-Swap an – "
-            f"du bekommst einen Follow von @{user.handle}, wenn du zurückfolgst. "
-            f"Bestätigen: {link_for(offer, settings)}"
-        )
         try:
-            await bsky_actions.send_dm(session, target_did, message, settings, persist_cb=make_persist_cb(user, settings))
+            allow = await public_client.get_chat_allow_incoming(target_did)
+        except public_client.PublicBskyError:
+            allow = None
+        try:
+            follows_back = await public_client.does_follow(target_did, user.did)
+        except public_client.PublicBskyError:
+            follows_back = False
+        if allow == "none":
+            skip_reason = "Der Empfänger hat eingehende Nachrichten vollständig deaktiviert."
+        elif allow == "following" and not follows_back:
+            skip_reason = "Der Empfänger nimmt DMs nur von Personen an, denen er folgt."
+        elif allow is None and not follows_back:
+            skip_reason = "DM-Empfang des Empfängers unklar (Standard: nur gefolgte Personen)."
+    else:
+        skip_reason = "DM nicht möglich (kein chat.bsky-Scope)."
+
+    if skip_reason:
+        offer.dm_status = DM_FAILED
+        offer.dm_error = skip_reason
+        offer_dm_failed = True
+        offer_dm_error = skip_reason
+    elif settings.dm_enabled and "chat.bsky" in (user.scope or ""):
+        session = session_to_dict(user, settings)
+        text, facets = offer_dm_payload(offer, settings)
+        try:
+            await bsky_actions.send_dm(
+                session, target_did, text, settings,
+                persist_cb=make_persist_cb(user, settings), facets=facets,
+            )
+            await user.save()
             offer.dm_status = DM_SENT
             offer.dm_error = None
         except Exception as exc:
+            await user.save()
             offer.dm_status = DM_FAILED
             offer.dm_error = str(exc)
-    else:
-        offer.dm_status = DM_FAILED
-        offer.dm_error = "DM nicht möglich (kein chat.bsky-Scope)."
+            offer_dm_failed = offer.dm_status == DM_FAILED
+            offer_dm_error = offer.dm_error
     await offer.save()
 
-    return HTMLResponse(str(ui_partials.OfferCreatedPanel(offer_url=link_for(offer, settings))))
+    return HTMLResponse(
+        str(
+            ui_partials.OfferCreatedPanel(
+                offer_url=link_for(offer, settings),
+                dm_failed=offer_dm_failed,
+                dm_error=offer_dm_error,
+                reply_url=f"/offers/{offer.id}/reply",
+            )
+        )
+    )
 
 
-@router.get("/o/{offer_id}", response_class=HTMLResponse)
-async def offer_page(request: Request, offer_id: int, user: User | None = Depends(current_user)):
+@router.get("/o/{ref}", response_class=HTMLResponse)
+async def offer_page(request: Request, ref: str, user: User | None = Depends(current_user)):
+    settings = get_settings()
+    offer_id = verify_offer_ref(ref, settings)
+    if offer_id is None:
+        return HTMLResponse(str(offer_ui.Offer404()), status_code=404)
     offer = await Offer.objects.get_or_none(id=offer_id)
     if offer is None:
         return HTMLResponse(str(offer_ui.Offer404()), status_code=404)
@@ -124,9 +171,10 @@ async def offer_page(request: Request, offer_id: int, user: User | None = Depend
                 cancel_url=f"/offers/{offer.id}/cancel",
                 resend_url=f"/offers/{offer.id}/resend-dm",
                 dm_failed=(offer.dm_status == DM_FAILED),
+                reply_url=f"/offers/{offer.id}/reply",
             )
         elif user is None:
-            action = ui_partials.LoginCta(next_url=f"/o/{offer.id}")
+            action = ui_partials.LoginCta(next_url=f"/o/{ref}")
         else:
             action = ui_partials.InfoPanel(text="Nur die angefragte Person kann diesen Tausch bestätigen.")
     elif offer.status == STATUS_COMPLETED:
@@ -184,6 +232,33 @@ async def cancel_offer_route(request: Request, offer_id: int, user: User | None 
     return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Angebot zurückgezogen.")))
 
 
+@router.post("/offers/{offer_id}/reply", dependencies=[Depends(rate_limit(5, 60))])
+async def offer_public_reply_route(request: Request, offer_id: int, user: User | None = Depends(current_user)):
+    if user is None:
+        raise HTTPException(status_code=401, detail="Anmeldung erforderlich.")
+    settings = get_settings()
+    offer = await Offer.objects.get_or_none(id=offer_id)
+    if offer is None:
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Angebot nicht gefunden.")))
+    if offer.offerer_did != user.did:
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text="Nur der Anbieter kann öffentlich antworten.")))
+    session = session_to_dict(user, settings)
+    text, facets = offer_reply_payload(offer, settings)
+    try:
+        await bsky_actions.reply_to_offer_post(
+            session, offer.target_did, text, facets, settings,
+            persist_cb=make_persist_cb(user, settings),
+        )
+        await user.save()
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=True, text="Öffentliche Antwort auf den neuesten Post gepostet.")))
+    except bsky_actions.AuthSessionError as exc:
+        await user.save()
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=str(exc))))
+    except bsky_actions.BlueskyActionError as exc:
+        await user.save()
+        return HTMLResponse(str(ui_partials.ResultPanel(ok=False, text=f"Antwort fehlgeschlagen: {exc}")))
+
+
 @router.post("/offers/{offer_id}/resend-dm", dependencies=[Depends(rate_limit(5, 60))])
 async def resend_dm_route(request: Request, offer_id: int, user: User | None = Depends(current_user)):
     if user is None:
@@ -199,21 +274,29 @@ async def resend_dm_route(request: Request, offer_id: int, user: User | None = D
     await offer.save()
     if settings.dm_enabled and "chat.bsky" in (user.scope or ""):
         session = session_to_dict(user, settings)
-        message = (
-            f"MutualSky: @{user.handle} bietet dir einen Follow-Swap an – "
-            f"du bekommst einen Follow von @{user.handle}, wenn du zurückfolgst. "
-            f"Bestätigen: {link_for(offer, settings)}"
-        )
+        text, facets = offer_dm_payload(offer, settings)
         try:
-            await bsky_actions.send_dm(session, offer.target_did, message, settings, persist_cb=make_persist_cb(user, settings))
+            await bsky_actions.send_dm(
+                session, offer.target_did, text, settings,
+                persist_cb=make_persist_cb(user, settings), facets=facets,
+            )
+            await user.save()
             offer.dm_status = DM_SENT
         except Exception as exc:
+            await user.save()
             offer.dm_status = DM_FAILED
             offer.dm_error = str(exc)
     await offer.save()
     dm_failed = offer.dm_status == DM_FAILED
     return HTMLResponse(
-        str(ui_partials.CancelPanel(cancel_url=f"/offers/{offer.id}/cancel", resend_url=f"/offers/{offer.id}/resend-dm", dm_failed=dm_failed))
+        str(
+            ui_partials.CancelPanel(
+                cancel_url=f"/offers/{offer.id}/cancel",
+                resend_url=f"/offers/{offer.id}/resend-dm",
+                dm_failed=dm_failed,
+                reply_url=f"/offers/{offer.id}/reply",
+            )
+        )
     )
 
 

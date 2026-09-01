@@ -50,7 +50,18 @@ async def resolve_handle(handle: str) -> str | None:
     except Exception:
         return None
     if resp.status_code != 200:
-        return None
+        # 3) Public atproto resolver (covers shared hosts without well-known)
+        try:
+            resp = await safe_get(
+                "https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle",
+                params={"handle": handle},
+            )
+        except Exception:
+            return None
+        if resp.status_code != 200:
+            return None
+        did = resp.json().get("did", "")
+        return did if is_valid_did(did) else None
     did = resp.text.split()[0]
     return did if is_valid_did(did) else None
 

@@ -1,6 +1,6 @@
 from pyjsx import JSX, jsx
 
-from .components import Layout, SearchForm, StatusBadge, OfferRow
+from .components import Layout, SearchTabs, StatusBadge, OfferRow
 
 
 def LandingPage(*, children=None, title="MutualSky") -> JSX:
@@ -73,10 +73,6 @@ def Dashboard(*, children=None, user=None, outgoing=None, incoming=None, title="
                 {outgoing_box}
                 {incoming_box}
             </div>
-            <section class="card search-section">
-                <h2>Account suchen</h2>
-                <SearchForm />
-                <div id="search-results"></div>
-            </section>
+            <SearchTabs user={user} title="Accounts und Posts suchen" />
         </Layout>
     )

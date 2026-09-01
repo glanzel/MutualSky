@@ -98,6 +98,8 @@ def test_create_offer_htmx(client, make_user, settings):
                 "app.routes.offers.resolve_identity",
                 new=AsyncMock(return_value=("did:plc:bob-real", "bob.test", {})),
             ),
+            patch("app.bluesky.client.get_chat_allow_incoming", new=AsyncMock(return_value="all")),
+            patch("app.bluesky.client.does_follow", new=AsyncMock(return_value=False)),
             patch("app.bluesky.actions.send_dm", new=AsyncMock()) as send_dm,
         ):
             resp = client.post("/offers", data={"target": "bob.test"}, headers={"HX-Request": "true"})
@@ -133,8 +135,14 @@ def test_offer_public_page(client, make_user):
     )
     offer_id = asyncio.run(Offer.objects.filter(offerer_did=user.did).first()).id
 
+    from app.config import get_settings
+    from app.offers import offer_ref
+
+    offer = asyncio.run(Offer.objects.get(id=offer_id))
+    ref = offer_ref(offer, get_settings())
+
     with patch("app.routes.offers._safe_profile", new=AsyncMock(side_effect=lambda h: {"handle": h, "avatar": None})):
-        resp = client.get(f"/o/{offer_id}")
+        resp = client.get(f"/o/{ref}")
     assert resp.status_code == 200
     assert "pub-alice" in resp.text
     assert "bestätigen" in resp.text.lower()
