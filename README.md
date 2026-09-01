@@ -1,85 +1,94 @@
 # MutualSky
 
-Freundschaft auf dem Atmosphere / Bluesky – eine Webapp zum Tauschen von Bluesky-Follows.
+Friendship on the Atmosphere / Bluesky – a web app for swapping Bluesky follows.
 
-Der Anbieter wählt einen Account aus und bietet einen „Follow-Swap" an: **Du bekommst einen Follow, wenn du zurückfolgst.** Sobald die angefragte Person den Tausch in der App bestätigt, werden **beide Follows in einem Schritt** per OAuth im Namen der jeweiligen Nutzer gesetzt.
+An offerer picks an account and proposes a "follow swap": **You get a follow if you follow back.** As soon as the requested person confirms the swap in the app, **both follows are set in a single step** via OAuth on behalf of the respective users.
 
-## So funktioniert es
+## How it works
 
-1. Anmelden mit dem eigenen Bluesky-Account (OAuth 2.1 + DPoP, confidential client).
-2. Account suchen und „Follow-Swap anbieten". Die Person bekommt eine Bluesky-DM mit einem Link zur Angebotsseite.
-3. Die Person öffnet den Link, meldet sich an und bestätigt den Tausch.
-4. Die App führt beide Follows sofort aus: Ziel→Anbieter (Grant des Ziels) und Anbieter→Ziel (gespeicherter Grant des Anbieters).
+1. Sign in with your own Bluesky account (OAuth 2.1 + DPoP, confidential client).
+2. Search for an account and offer a follow swap. The person receives a Bluesky DM with a link to the offer page.
+3. The person opens the link, signs in, and confirms the swap.
+4. The app executes both follows immediately: target→offerer (target's grant) and offerer→target (stored grant of the offerer).
 
-Kein Hintergrund-Worker: alles ist ereignisgetrieben über den Bestätigungs-Klick. Angebote verfallen datenbasiert (`OFFER_TTL_DAYS`, lazy geprüft).
+No background worker: everything is event-driven via the confirmation click. Offers expire based on the database (`OFFER_TTL_DAYS`, checked lazily).
 
-## Tech-Stack
+The UI is bilingual (German/English) with a language switch in the header, shows a **Beta** badge, and links to this repository (open source).
+
+## Tech stack
 
 - FastAPI + uvicorn (async)
-- PyJSX (`.px`-Templates, JSX in Python) + HTMX + eigenes CSS
-- Oxyde ORM (async, Pydantic, Rust-Core) + SQLite
-- Offizielles Bluesky-Referenz-Cookbook `python-oauth-web-app` als OAuth-Basis (auf httpx portiert)
+- PyJSX (`.px` templates, JSX in Python) + HTMX + custom CSS
+- Oxyde ORM (async, Pydantic, Rust core) + SQLite
+- The official Bluesky reference cookbook `python-oauth-web-app` as OAuth base (ported to httpx)
 
-## Voraussetzungen
+## Prerequisites
 
-- Python >= 3.12 (verwaltet via `uv`)
-- Öffentliche HTTPS-Domain (OAuth-Redirect + Client-Metadaten)
+- Python >= 3.12 (managed via `uv`)
+- A public HTTPS domain (OAuth redirect + client metadata)
 
-## Lokale Entwicklung
+## Local development
 
 ```bash
 uv sync
-cp .env.example .env        # Werte setzen, COOKIE_SECURE=false
+cp .env.example .env        # set values; COOKIE_SECURE=false
 uv run python scripts/generate_jwk.py   # -> OAUTH_CLIENT_SECRET_JWK
-uv run oxyde migrate        # Datenbank anlegen
+uv run oxyde migrate        # create the database
 uv run uvicorn app.main:app --reload
 ```
 
-Lokales Login funktioniert über den Loopback-OAuth-Client (kein Metadaten-Hosting nötig).
+Local sign-in works through the loopback OAuth client (no metadata hosting needed). For the authenticated post search (Posts/Account tab) and DMs, use the app through a public domain such as an ngrok static domain (`PUBLIC_BASE_URL`).
 
 ## Deployment
 
-1. DNS: `mutualsky`-Record auf den Server (Subdomain von ecord.de) + HTTPS-Zertifikat (Caddy/nginx).
-2. `.env` mit `PUBLIC_BASE_URL=https://mutualsky.ecord.de`, generierten Secrets, `OAUTH_CLIENT_SECRET_JWK`, `COOKIE_SECURE=true`, `DATABASE_URL` (Volume).
-3. Migrationen anwenden: `uv run oxyde migrate` (oder im Container `migrate` vor App-Start).
-4. Container starten (siehe `Dockerfile`):
+1. DNS: point a record at the server (own domain) + HTTPS certificate (Caddy/nginx).
+2. `.env` with `PUBLIC_BASE_URL=https://your.domain`, generated secrets, `OAUTH_CLIENT_SECRET_JWK`, `COOKIE_SECURE=true`, `DATABASE_URL` (volume).
+3. Apply migrations: `uv run oxyde migrate` (or `migrate` in the container before app start).
+4. Start the container (see `Dockerfile`):
 
 ```bash
 docker build -t mutualsky .
 docker run -d -p 8000:8000 -v mutualsky-data:/data --env-file .env mutualsky
 ```
 
-5. **Vor Go-Live verifizieren:** `curl https://mutualsky.ecord.de/bsky-oauth-client.json` – der Wert `client_id` im Dokument muss exakt mit der Abruf-URL übereinstimmen. Danach einmal mit einem echten Account einloggen.
+5. **Verify before going live:** `curl https://your.domain/bsky-oauth-client.json` – the value of `client_id` in the document must exactly match the fetch URL. Then sign in once with a real account.
 
-### Wichtig: Domain-Wechsel
+### Important: domain change
 
-`client_id` (URL der Client-Metadaten) und `redirect_uris` sind an die Domain gebunden; ebenso bindet der Authorization Server Refresh-Tokens an die `client_id`. **Ein Wechsel der Domain invalidiert alle bestehenden Logins** – alle Nutzer müssen sich neu autorisieren.
+`client_id` (client metadata URL) and `redirect_uris` are bound to the domain; the authorization server also binds refresh tokens to the `client_id`. **Changing the domain invalidates all existing sign-ins** – every user must re-authorize.
 
 ## Tests
 
 ```bash
-uv run pytest        # 20 Tests (Swap-Orchestrierung + Routen, Provider gemockt)
-uv run ruff check    # Lint
+uv run pytest        # 20 tests (swap orchestration + routes, providers mocked)
+uv run ruff check    # lint
 ```
 
-## Einschränkungen (MVP)
+## MVP limitations
 
-- **DM-Zustellung nicht garantierbar**: nur sendbar, wenn der Sender den `transition:chat.bsky`-Scope erteilt hat und der Empfänger DMs zulässt. Sonst bleibt das Angebot in der App sichtbar (Badge + „DM erneut senden").
-- **OAuth-Tokens funktionieren nur gegen PDS-Endpoints** (Bluesky-Policy). Schreibaktionen (Follow, Chat) laufen daher über die jeweilige PDS; öffentliche Leseaufrufe über `public.api.bsky.app`.
-- **Follow-Baiting / nachträgliches Unfollow** wird nicht überwacht (kein Auto-Unfollow, keine Mindesthaltedauer).
-- **Logout** löscht nur die Browser-Session, nicht den serverseitigen Grant (damit laufende Angebote abgeschlossen werden können).
-- Tokens liegen mit `APP_SECRET` (Fernet) verschlüsselt in SQLite.
+- **DM delivery is not guaranteed**: only sendable when the sender granted the `transition:chat.bsky` scope and the recipient allows incoming DMs. The app pre-checks the recipient's DM policy and explains the reason; the offer still exists in the app (badge + "Resend DM"). If DMs are blocked, the offerer can optionally post a public reply to the recipient's latest post – this is an explicit action, is publicly visible, and can't be undone.
+- **OAuth tokens only work against PDS endpoints** (Bluesky policy). Write actions (follow, chat) go through the respective PDS; public reads use `public.api.bsky.app`.
+- **Follow baiting / unfollowing afterwards** is not monitored (no auto-unfollow, no minimum holding period).
+- **Logout** only clears the browser session, not the server-side grant (so running offers can be completed).
+- Tokens are stored encrypted in SQLite using `APP_SECRET` (Fernet).
+- Offer URLs are capability links (`/o/{id}-{signature}`, HMAC-signed) – they are not enumerable; withdrawn offers are hidden from listings.
 
-## Routen
+## Routes
 
-| Route | Zweck |
+| Route | Purpose |
 |---|---|
-| `GET /` | Landing / Dashboard (meine + eingehende Angebote) |
-| `GET /auth/login`, `POST /auth/start`, `GET /auth/callback`, `POST /auth/logout` | Bluesky-OAuth |
-| `POST /profiles/search` | Suche (HTMX) |
-| `GET /profile/{handle}` | Profil + Angebots-Button |
-| `POST /offers` | Angebot erstellen + DM |
-| `GET /o/{id}` | Öffentliche Angebotsseite |
-| `POST /offers/{id}/confirm` | Tausch bestätigen (beide Follows) |
-| `POST /offers/{id}/cancel`, `POST /offers/{id}/resend-dm` | Aufheben / DM erneut senden |
-| `GET /bsky-oauth-client.json`, `GET /oauth/jwks.json` | OAuth-Client-Metadaten |
+| `GET /` | Landing / dashboard (my + incoming offers) |
+| `GET /archiv` | Archive of completed/expired offers |
+| `GET /auth/login`, `POST /auth/start`, `GET /auth/callback`, `POST /auth/logout` | Bluesky OAuth |
+| `GET /lang/{de\|en}` | Language switch (preserves current page) |
+| `POST /profiles/search` | Account search (HTMX) |
+| `POST /profiles/search/more` | Account search pagination |
+| `POST /posts/search`, `POST /posts/search/more` | Post/Account search (signed-in, via AppView proxy) |
+| `GET /profile/{handle}` | Profile + offer button |
+| `POST /offers` | Create offer + DM |
+| `GET /o/{ref}` | Offer page (capability URL) |
+| `POST /offers/{id}/confirm` | Confirm swap (both follows) |
+| `POST /offers/{id}/cancel` | Withdraw offer (+ deletes public reply) |
+| `POST /offers/{id}/resend-dm` | Resend the notification DM |
+| `POST /offers/{id}/reply` | Post the offer publicly as a reply |
+| `GET /bsky-oauth-client.json`, `GET /oauth/jwks.json` | OAuth client metadata |
